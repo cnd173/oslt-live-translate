@@ -1,0 +1,52 @@
+# Contributing
+
+Cảm ơn bạn muốn đóng góp cho OSLT.
+
+## Thiết lập
+
+```bash
+git clone https://github.com/cnd173/oslt-live-translate.git
+cd oslt-live-translate
+npm install
+npm test
+npm start
+```
+
+Trên macOS, cấp Screen Recording permission trước khi kiểm thử OCR.
+
+## Quy trình
+
+1. Tạo issue mô tả bug hoặc thay đổi lớn.
+2. Fork repository và tạo branch ngắn gọn.
+3. Giữ thay đổi tập trung, tránh refactor không liên quan.
+4. Chạy `npm test`.
+5. Kiểm thử thủ công với ít nhất một đoạn ngắn và một trang nhiều paragraph.
+6. Gửi pull request kèm ảnh trước/sau nếu thay đổi layout.
+
+## Quy ước code
+
+- Dùng CommonJS như code hiện tại.
+- Giữ main-process functions nhỏ và dễ đọc.
+- Không đưa Node API trực tiếp vào renderer; mở rộng preload bridge khi cần.
+- Không hard-code token hoặc API key.
+- Giữ coordinate conversion ở main process.
+- Khi thay đổi OCR/layout, kiểm tra cả Retina scale factor và vùng có nhiều paragraph.
+
+## Checklist pull request
+
+- [ ] `npm test` thành công.
+- [ ] Không commit `node_modules`, trained data hoặc file cục bộ.
+- [ ] README/docs được cập nhật nếu hành vi thay đổi.
+- [ ] Không làm mất khả năng chụp screenshot có overlay.
+- [ ] Kết quả không tự OCR và nhảy sau khi đã khóa.
+
+## Báo lỗi
+
+Vui lòng cung cấp:
+
+- hệ điều hành và phiên bản;
+- Node.js/npm version;
+- ngôn ngữ OCR và ngôn ngữ đích;
+- kích thước/mô tả vùng quét;
+- log terminal đã loại bỏ dữ liệu nhạy cảm;
+- ảnh minh họa nếu có thể.

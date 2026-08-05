@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<title>Live Translate Overlay</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    user-select: none;
+  }
+
+  .stage {
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(139, 92, 246, 0.95);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 10px rgba(124, 58, 237, 0.45);
+  }
+
+  /* Toolbar luôn hiện để người dùng nhận biết ngay vùng chọn và điểm kéo. */
+  .hover-zone {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 30px;
+    -webkit-app-region: drag;
+    cursor: move;
+    z-index: 30;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    padding: 0 8px;
+    background: rgba(35, 25, 60, 0.96);
+    border-bottom: 1px solid rgba(167, 139, 250, 0.85);
+    border-radius: 6px 6px 0 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #a5b4fc;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+  }
+  .status-dot.ok { background: #34d399; }
+  .status-dot.loading-lang { background: #fbbf24; }
+  .status-dot.paused { background: #9ca3af; }
+  .status-dot.error { background: #f87171; }
+
+  .spacer { flex: 1; -webkit-app-region: drag; min-width: 4px; height: 100%; }
+
+  select, .icon-btn {
+    -webkit-app-region: no-drag;
+  }
+
+  select {
+    font-size: 9px;
+    max-width: 56px;
+    background: rgba(255,255,255,0.08);
+    color: #e0e7ff;
+    border: 1px solid rgba(129, 140, 248, 0.4);
+    border-radius: 4px;
+    padding: 1px;
+  }
+  select:focus { outline: none; }
+
+  .icon-btn {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(129, 140, 248, 0.4);
+    background: rgba(255,255,255,0.06);
+    color: #e0e7ff;
+    font-size: 9px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.2); }
+  .icon-btn.active { background: rgba(129, 140, 248, 0.55); }
+  .icon-btn.close:hover { background: rgba(248, 113, 113, 0.6); }
+
+  .patches {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .patch {
+    position: absolute;
+    display: block;
+    background: rgba(17, 17, 22, 0.97);
+    color: #f2f2f5;
+    font-weight: 500;
+    line-height: 1.18;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: left;
+    border: 0;
+    border-radius: 2px;
+    box-shadow: none;
+    text-shadow: none;
+    padding: 2px 3px;
+    overflow: hidden;
+  }
+
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(165, 180, 252, 0.65);
+    font-size: 11px;
+    font-style: italic;
+    text-align: center;
+    padding: 10px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="hover-zone">
+      <div class="toolbar">
+        <div class="status-dot" id="statusDot" title="Trạng thái"></div>
+        <select id="ocrLangSelect" title="Ngôn ngữ văn bản gốc (OCR)">
+          <option value="eng">EN</option>
+          <option value="vie">VI</option>
+          <option value="jpn">JA</option>
+          <option value="chi_sim">中文</option>
+          <option value="kor">KO</option>
+          <option value="fra">FR</option>
+          <option value="deu">DE</option>
+          <option value="spa">ES</option>
+          <option value="tha">TH</option>
+          <option value="rus">RU</option>
+        </select>
+        <select id="targetLangSelect" title="Dịch sang ngôn ngữ">
+          <option value="vi">→VI</option>
+          <option value="en">→EN</option>
+          <option value="ja">→JA</option>
+          <option value="zh-CN">→中文</option>
+          <option value="ko">→KO</option>
+          <option value="fr">→FR</option>
+          <option value="de">→DE</option>
+          <option value="es">→ES</option>
+          <option value="th">→TH</option>
+          <option value="ru">→RU</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="refreshBtn" title="Quét và dịch lại">↻</button>
+        <button class="icon-btn" id="toggleOriginalBtn" title="Hiện văn bản gốc thay vì bản dịch">Aa</button>
+        <button class="icon-btn" id="pauseBtn" title="Tạm dừng / tiếp tục">⏸</button>
+        <button class="icon-btn close" id="closeBtn" title="Đóng ứng dụng">✕</button>
+      </div>
+    </div>
+
+    <div class="patches" id="patches"></div>
+    <div class="placeholder" id="placeholder">Đặt khung này lên vùng chữ cần dịch…</div>
+  </div>
+
+<script>
+  const ocrLangSelect = document.getElementById('ocrLangSelect');
+  const targetLangSelect = document.getElementById('targetLangSelect');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const toggleOriginalBtn = document.getElementById('toggleOriginalBtn');
+  const statusDot = document.getElementById('statusDot');
+  const patches = document.getElementById('patches');
+  const placeholder = document.getElementById('placeholder');
+
+  let currentLines = [];
+  let showOriginal = false;
+
+  const STATUS_TITLE = {
+    ok: 'Đang theo dõi vùng chữ…',
+    'loading-lang': 'Đang tải dữ liệu ngôn ngữ OCR…',
+    paused: 'Đã tạm dừng',
+    error: 'Lỗi khi nhận diện hoặc dịch văn bản',
+  };
+
+  function applyStatus(status) {
+    statusDot.className = 'status-dot ' + status;
+    statusDot.title = STATUS_TITLE[status] || status;
+    pauseBtn.textContent = status === 'paused' ? '▶' : '⏸';
+  }
+
+  function renderPatches() {
+    patches.innerHTML = '';
+    placeholder.style.display = currentLines.length ? 'none' : 'flex';
+
+    for (const line of currentLines) {
+      const div = document.createElement('div');
+      div.className = 'patch';
+      div.style.left = line.x + 'px';
+      div.style.top = line.y + 'px';
+      div.style.width = line.width + 'px';
+      div.style.height = line.height + 'px';
+      div.textContent = (showOriginal ? line.original : line.translated) || '…';
+      patches.appendChild(div);
+      fitPatchText(div, line);
+    }
+  }
+
+  function fitPatchText(element, line) {
+    const baseSize = Math.max(9, (line.fontHeight || 14) * 0.82);
+    let low = 8;
+    // Auto-fit chỉ được thu nhỏ; không phóng chữ vượt quá cỡ ước lượng của chữ gốc.
+    let high = Math.min(48, Math.max(9, baseSize * 1.08));
+
+    // Tìm font lớn nhất vẫn nằm trọn trong bbox của đoạn gốc.
+    for (let i = 0; i < 10; i++) {
+      const size = (low + high) / 2;
+      element.style.fontSize = size + 'px';
+      const fits = element.scrollWidth <= element.clientWidth + 1 &&
+        element.scrollHeight <= element.clientHeight + 1;
+      if (fits) low = size;
+      else high = size;
+    }
+
+    element.style.fontSize = Math.max(8, low) + 'px';
+  }
+
+  window.overlay.getState().then((state) => {
+    if (state.ocrLang) ocrLangSelect.value = state.ocrLang;
+    if (state.targetLang) targetLangSelect.value = state.targetLang;
+    applyStatus(state.paused ? 'paused' : 'ok');
+  });
+
+  ocrLangSelect.addEventListener('change', () => {
+    window.overlay.setOcrLang(ocrLangSelect.value);
+  });
+
+  targetLangSelect.addEventListener('change', () => {
+    window.overlay.setTargetLang(targetLangSelect.value);
+  });
+
+  pauseBtn.addEventListener('click', () => window.overlay.togglePause());
+  refreshBtn.addEventListener('click', () => window.overlay.refresh());
+  closeBtn.addEventListener('click', () => window.overlay.quit());
+
+  toggleOriginalBtn.addEventListener('click', () => {
+    showOriginal = !showOriginal;
+    toggleOriginalBtn.classList.toggle('active', showOriginal);
+    renderPatches();
+  });
+
+  window.overlay.onStatus((status) => applyStatus(status));
+
+  window.overlay.onTranslation(({ lines }) => {
+    currentLines = lines || [];
+    renderPatches();
+  });
+</script>
+</body>
+</html>

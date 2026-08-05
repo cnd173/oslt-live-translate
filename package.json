@@ -1,0 +1,29 @@
+{
+  "name": "oslt-live-translate",
+  "version": "1.0.0",
+  "description": "Desktop OCR translation overlay that preserves paragraph positions on screen",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js",
+    "test": "npm run check"
+  },
+  "keywords": [
+    "electron",
+    "ocr",
+    "overlay",
+    "screen-translation",
+    "tesseract"
+  ],
+  "author": "cnd173",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^43.3.0"
+  },
+  "dependencies": {
+    "jimp": "^1.6.1",
+    "screenshot-desktop": "^1.15.4",
+    "tesseract.js": "^7.0.0"
+  }
+}

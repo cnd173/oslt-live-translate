@@ -1,0 +1,23 @@
+node_modules/
+
+# OCR language data downloaded/generated at runtime
+*.traineddata
+
+# Local assistant/editor settings
+.claude/
+CLAUDE.md
+
+# OS/editor files
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Logs and local output
+*.log
+npm-debug.log*
+dist/
+out/
+release/
+coverage/
