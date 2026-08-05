@@ -15,6 +15,8 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Mở rộng patch quanh bbox, dùng nền kín và typography nhẹ để tăng safe space, tương phản và khả năng đọc đoạn dài.
+- Nhận diện word-level cho code/URL, nền xám và chữ xanh; giữ nguyên token kỹ thuật qua placeholder khi dịch.
+- Có nút bật/tắt Preserve styles và fallback về plain text nếu placeholder bị mất.
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
 - Không cần API key cho cấu hình mặc định.
@@ -79,6 +81,7 @@ Nếu không có quyền, chấm trạng thái trên toolbar chuyển sang màu 
 | `EN`, `VI`, ... | Ngôn ngữ chữ nguồn cho Tesseract |
 | `→VI`, `→EN`, ... | Ngôn ngữ bản dịch |
 | `↻` | Xóa kết quả hiện tại và quét lại |
+| `◐` | Bật/tắt giữ nền code và màu link |
 | `Aa` | Chuyển giữa bản dịch và văn bản OCR |
 | `⏸` / `▶` | Tạm dừng hoặc tiếp tục |
 | `✕` | Thoát ứng dụng |
@@ -120,6 +123,8 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Endpoint `translate.googleapis.com` đang được dùng theo cách không chính thức, không có SLA và có thể bị giới hạn tốc độ hoặc thay đổi hành vi.
 - OCR phụ thuộc mạnh vào độ phân giải, độ tương phản, font, hiệu ứng nền và ngôn ngữ được chọn.
 - Font family và style gốc chưa được tái tạo chính xác; ứng dụng ước lượng cỡ chữ từ chiều cao dòng rồi đồng bộ theo nhóm gần nhau.
+- Nhận diện nền xám/màu xanh dùng heuristic pixel nên có thể sai trên gradient, ảnh nền hoặc syntax theme lạ; nút `◐` cho phép tắt style.
+- Bold và italic chưa được bảo toàn trong pha hiện tại.
 - Bản dịch dài hơn văn bản gốc phải thu nhỏ để vừa bounding box.
 - Toolbar chiếm 30px phía trên cửa sổ và vùng này không được OCR.
 - Chưa có bộ cài ký số hoặc bản phát hành đóng gói.

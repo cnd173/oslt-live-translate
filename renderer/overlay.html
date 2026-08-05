@@ -119,6 +119,18 @@
     overflow: hidden;
   }
 
+  .styled-token.code {
+    padding: 0.04em 0.2em;
+    border-radius: 3px;
+    background: #34363d;
+    color: #f0f1f4;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .styled-token.link {
+    color: #66aaff;
+  }
+
   .placeholder {
     position: absolute;
     inset: 0;
@@ -165,6 +177,7 @@
         </select>
         <div class="spacer"></div>
         <button class="icon-btn" id="refreshBtn" title="Quét và dịch lại">↻</button>
+        <button class="icon-btn active" id="styleBtn" title="Bật / tắt giữ style code và link">◐</button>
         <button class="icon-btn" id="toggleOriginalBtn" title="Hiện văn bản gốc thay vì bản dịch">Aa</button>
         <button class="icon-btn" id="pauseBtn" title="Tạm dừng / tiếp tục">⏸</button>
         <button class="icon-btn close" id="closeBtn" title="Đóng ứng dụng">✕</button>
@@ -180,6 +193,7 @@
   const targetLangSelect = document.getElementById('targetLangSelect');
   const pauseBtn = document.getElementById('pauseBtn');
   const refreshBtn = document.getElementById('refreshBtn');
+  const styleBtn = document.getElementById('styleBtn');
   const closeBtn = document.getElementById('closeBtn');
   const toggleOriginalBtn = document.getElementById('toggleOriginalBtn');
   const statusDot = document.getElementById('statusDot');
@@ -188,6 +202,7 @@
 
   let currentLines = [];
   let showOriginal = false;
+  let preserveStyles = true;
 
   const STATUS_TITLE = {
     ok: 'Đang theo dõi vùng chữ…',
@@ -221,7 +236,7 @@
       div.style.top = top + 'px';
       div.style.width = Math.max(4, right - left) + 'px';
       div.style.height = Math.max(4, bottom - top) + 'px';
-      div.textContent = (showOriginal ? line.original : line.translated) || '…';
+      renderPatchContent(div, line);
       patches.appendChild(div);
       entries.push({
         element: div,
@@ -231,6 +246,23 @@
     }
 
     applyUniformFontSizes(entries);
+  }
+
+  function renderPatchContent(element, line) {
+    if (showOriginal || !preserveStyles || !Array.isArray(line.runs)) {
+      element.textContent = (showOriginal ? line.original : line.translated) || '…';
+      return;
+    }
+
+    element.textContent = '';
+    for (const run of line.runs) {
+      const span = document.createElement('span');
+      span.className = 'styled-token';
+      if (run.style && run.style.code) span.classList.add('code');
+      if (run.style && run.style.link) span.classList.add('link');
+      span.textContent = run.text || '';
+      element.appendChild(span);
+    }
   }
 
   function fitPatchText(element, line) {
@@ -303,6 +335,11 @@
 
   pauseBtn.addEventListener('click', () => window.overlay.togglePause());
   refreshBtn.addEventListener('click', () => window.overlay.refresh());
+  styleBtn.addEventListener('click', () => {
+    preserveStyles = !preserveStyles;
+    styleBtn.classList.toggle('active', preserveStyles);
+    renderPatches();
+  });
   closeBtn.addEventListener('click', () => window.overlay.quit());
 
   toggleOriginalBtn.addEventListener('click', () => {

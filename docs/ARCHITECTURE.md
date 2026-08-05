@@ -37,6 +37,13 @@ Expose API giới hạn qua `contextBridge`:
 - Không cho auto-fit phóng chữ quá cỡ ước lượng của văn bản gốc.
 - Nhóm các patch có `fontHeight` gần nhau và dùng cỡ fit trung vị làm mục tiêu chung; patch dài bất thường vẫn được thu nhỏ riêng để không tràn.
 - Mở rộng vùng render quanh bbox OCR trước khi thêm padding; dùng nền kín, font weight thường và line-height thoáng để giảm nhiễu từ chữ gốc.
+- Render styled runs bằng DOM API và `textContent`; không đưa nội dung OCR/dịch vào `innerHTML`.
+
+## Bảo toàn style word-level
+
+Với từng bbox word, main process lấy màu nền trội và phân tích foreground. Nền xám lệch khỏi nền trung vị của paragraph được xem là code badge; foreground xanh được xem là link. URL, path, method call và dotted identifier cũng được nhận diện bằng lexical rule.
+
+Các token đặc biệt được thay bằng placeholder `__OSLTn__` trước khi dịch. Sau dịch, placeholder được khôi phục thành semantic runs (`code`/`link`). Nếu thiếu, trùng hoặc hỏng placeholder, app gọi dịch lại bằng plain text và không áp style. Renderer chỉ ánh xạ semantic flags sang class CSS cố định.
 - Cho phép hiển thị text OCR để đối chiếu.
 
 ## Luồng quét

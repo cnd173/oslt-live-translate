@@ -1,8 +1,12 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
-const { Jimp } = require('jimp');
+const { Jimp, intToRGBA } = require('jimp');
 const { createWorker } = require('tesseract.js');
+const {
+  createTranslationPlan,
+  restoreStyledRuns,
+} = require('./lib/style-preserver');
 
 const CAPTURE_INTERVAL_MS = 1500;
 const MIN_CONFIDENCE = 35;
@@ -141,6 +145,108 @@ function median(values) {
     : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function colorMetrics({ r, g, b }) {
+  const max = Math.max(r, g, b) / 255;
+  const min = Math.min(r, g, b) / 255;
+  const delta = max - min;
+  let hue = 0;
+
+  if (delta > 0) {
+    if (max === r / 255) hue = 60 * (((g - b) / 255 / delta) % 6);
+    else if (max === g / 255) hue = 60 * ((b - r) / 255 / delta + 2);
+    else hue = 60 * ((r - g) / 255 / delta + 4);
+  }
+  if (hue < 0) hue += 360;
+
+  return {
+    hue,
+    saturation: max === 0 ? 0 : delta / max,
+    luminance: 0.2126 * r + 0.7152 * g + 0.0722 * b,
+  };
+}
+
+function colorDistance(a, b) {
+  return Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+}
+
+function analyzeWordPixels(image, bbox) {
+  const x0 = Math.max(0, Math.floor(bbox.x0));
+  const y0 = Math.max(0, Math.floor(bbox.y0));
+  const x1 = Math.min(image.bitmap.width, Math.ceil(bbox.x1));
+  const y1 = Math.min(image.bitmap.height, Math.ceil(bbox.y1));
+  const width = x1 - x0;
+  const height = y1 - y0;
+  if (width < 2 || height < 2) return null;
+
+  const stride = Math.max(1, Math.floor(Math.min(width, height) / 12));
+  const samples = [];
+  const buckets = new Map();
+
+  for (let y = y0; y < y1; y += stride) {
+    for (let x = x0; x < x1; x += stride) {
+      const color = intToRGBA(image.getPixelColor(x, y));
+      if (color.a < 200) continue;
+      samples.push(color);
+      const key = `${color.r >> 4}:${color.g >> 4}:${color.b >> 4}`;
+      const bucket = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+      bucket.count += 1;
+      bucket.r += color.r;
+      bucket.g += color.g;
+      bucket.b += color.b;
+      buckets.set(key, bucket);
+    }
+  }
+
+  if (!samples.length || !buckets.size) return null;
+  const dominant = [...buckets.values()].sort((a, b) => b.count - a.count)[0];
+  const background = {
+    r: dominant.r / dominant.count,
+    g: dominant.g / dominant.count,
+    b: dominant.b / dominant.count,
+  };
+  const backgroundMetrics = colorMetrics(background);
+
+  let foregroundCount = 0;
+  let blueCount = 0;
+  for (const color of samples) {
+    if (colorDistance(color, background) < 42) continue;
+    foregroundCount += 1;
+    const metrics = colorMetrics(color);
+    if (metrics.hue >= 185 && metrics.hue <= 235 && metrics.saturation >= 0.35) {
+      blueCount += 1;
+    }
+  }
+
+  return {
+    backgroundLuminance: backgroundMetrics.luminance,
+    backgroundSaturation: backgroundMetrics.saturation,
+    blueRatio: foregroundCount ? blueCount / foregroundCount : 0,
+  };
+}
+
+function classifyWordStyles(image, words) {
+  const analyzed = words.map((word) => ({
+    word,
+    pixels: analyzeWordPixels(image, word.bbox),
+  }));
+  const baseline = median(
+    analyzed
+      .map(({ pixels }) => pixels && pixels.backgroundLuminance)
+      .filter(Number.isFinite)
+  );
+
+  return analyzed.map(({ word, pixels }) => {
+    const style = {};
+    if (pixels) {
+      const grayBackground = pixels.backgroundSaturation < 0.24 &&
+        Math.abs(pixels.backgroundLuminance - baseline) >= 12;
+      if (grayBackground) style.code = true;
+      if (pixels.blueRatio >= 0.14) style.link = true;
+    }
+    return { text: word.text, style };
+  });
+}
+
 // Tesseract đôi khi nhập hai đoạn cách xa nhau thành cùng một paragraph. Tách
 // lại khi khoảng trống dọc lớn rõ rệt so với chiều cao chữ của các dòng.
 function splitParagraphByVerticalGap(lines) {
@@ -229,7 +335,13 @@ async function captureAndOcr() {
       if (totalLinesUsed >= MAX_LINES) break;
 
       const filtered = paraLines
-        .map((l) => ({ text: (l.text || '').trim(), bbox: l.bbox, confidence: l.confidence, rowAttributes: l.rowAttributes }))
+        .map((l) => ({
+          text: (l.text || '').trim(),
+          bbox: l.bbox,
+          confidence: l.confidence,
+          rowAttributes: l.rowAttributes,
+          words: (l.words || []).filter((word) => word.text && word.confidence >= MIN_CONFIDENCE),
+        }))
         .filter((l) => l.text.length > 0 && l.confidence >= MIN_CONFIDENCE)
         .slice(0, MAX_LINES - totalLinesUsed);
 
@@ -237,8 +349,13 @@ async function captureAndOcr() {
       totalLinesUsed += filtered.length;
 
       const avgHeight = paragraphAvgHeight(filtered);
+      const text = filtered.map((l) => l.text).join(' ');
+      const styledWords = classifyWordStyles(image, filtered.flatMap((l) => l.words));
+      const translationPlan = createTranslationPlan(text, styledWords);
       paragraphs.push({
-        text: filtered.map((l) => l.text).join(' '),
+        text,
+        translationInput: translationPlan.input,
+        protectedItems: translationPlan.protectedItems,
         bbox: {
           x0: Math.min(...filtered.map((l) => l.bbox.x0)),
           y0: Math.min(...filtered.map((l) => l.bbox.y0)),
@@ -260,7 +377,20 @@ async function captureAndOcr() {
     const translations = await mapWithConcurrency(
       paragraphs,
       3,
-      (paragraph) => translateWithRetry(paragraph.text, targetLang)
+      async (paragraph) => {
+        const translated = await translateWithRetry(paragraph.translationInput, targetLang);
+        const runs = restoreStyledRuns(translated, paragraph.protectedItems);
+        if (paragraph.protectedItems.length && !runs) {
+          return {
+            text: await translateWithRetry(paragraph.text, targetLang),
+            runs: null,
+          };
+        }
+        return {
+          text: runs ? runs.map((run) => run.text).join('') : translated,
+          runs,
+        };
+      }
     );
 
     const lines = paragraphs.map((p, index) => {
@@ -276,7 +406,8 @@ async function captureAndOcr() {
         height: Math.max(4, y1 - y0),
         fontHeight: p.uniformHeight / upscale / scale,
         original: p.text,
-        translated: translations[index],
+        translated: translations[index].text,
+        runs: translations[index].runs,
       };
     });
 

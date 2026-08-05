@@ -39,6 +39,10 @@ OSLT dùng bbox của Tesseract và font hệ thống thay vì font gốc. Kết
 
 Thu hẹp vùng chọn thường giúp OCR và layout tốt hơn.
 
+## Code hoặc link được tô style sai
+
+Nhận diện màu/nền đang dùng heuristic. Bấm `◐` để tắt Preserve styles nhưng vẫn giữ bản dịch plain text. Với kết quả mới, thu hẹp vùng chọn và bấm `↻` có thể giúp phân tích màu chính xác hơn.
+
 ## Bản dịch không tự nhiên hoặc còn chữ gốc
 
 Nhấn `Aa` để kiểm tra text OCR. Nếu OCR đã sai, hãy chọn đúng ngôn ngữ và quét lại. Nếu OCR đúng nhưng dịch sai, nguyên nhân có thể là endpoint dịch máy không chính thức.
