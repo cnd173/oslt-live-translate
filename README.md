@@ -14,6 +14,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Dịch tối đa ba đoạn song song để giảm độ trễ.
 - Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
+- Mở rộng patch nhẹ quanh bbox để tạo safe space, padding và khoảng cách dòng dễ đọc hơn.
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
 - Không cần API key cho cấu hình mặc định.

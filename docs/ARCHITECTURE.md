@@ -36,6 +36,7 @@ Expose API giới hạn qua `contextBridge`:
 - Dùng binary search để tìm cỡ chữ lớn nhất vừa patch.
 - Không cho auto-fit phóng chữ quá cỡ ước lượng của văn bản gốc.
 - Nhóm các patch có `fontHeight` gần nhau và dùng cỡ fit trung vị làm mục tiêu chung; patch dài bất thường vẫn được thu nhỏ riêng để không tràn.
+- Mở rộng vùng render vài pixel quanh bbox OCR trước khi thêm padding, giữ safe space mà không làm font co lại không cần thiết.
 - Cho phép hiển thị text OCR để đối chiếu.
 
 ## Luồng quét
