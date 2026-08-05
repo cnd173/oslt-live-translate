@@ -12,6 +12,8 @@ const CAPTURE_INTERVAL_MS = 1500;
 const MIN_CONFIDENCE = 35;
 const MAX_LINES = 60;
 const TOOLBAR_HEIGHT = 30;
+const OCR_TARGET_PIXEL_RATIO = 1.5;
+const TRANSLATE_CONCURRENCY = 5;
 
 let overlayWin = null;
 let worker = null;
@@ -318,8 +320,16 @@ async function captureAndOcr() {
     }
 
     image.crop({ x: cropX, y: cropY, w: cropW, h: cropH });
-    const upscale = cropW < 700 ? 2 : 1;
-    if (upscale > 1) image.scale(upscale);
+    // Retina screenshots thường có 2 physical pixels / CSS pixel. Tesseract
+    // không cần toàn bộ mật độ đó; chuẩn hóa xuống 1.5x giúp giảm mạnh số pixel.
+    // Vùng nhỏ non-Retina vẫn được upscale nhẹ để giữ độ chính xác chữ nhỏ.
+    let processingScale = 1;
+    if (scale > OCR_TARGET_PIXEL_RATIO) {
+      processingScale = OCR_TARGET_PIXEL_RATIO / scale;
+    } else if (cropW < 700) {
+      processingScale = Math.min(1.5, OCR_TARGET_PIXEL_RATIO / scale);
+    }
+    if (Math.abs(processingScale - 1) >= 0.05) image.scale(processingScale);
 
     const buf = await image.getBuffer('image/png');
     const { data } = await worker.recognize(buf, {}, { blocks: true });
@@ -372,11 +382,11 @@ async function captureAndOcr() {
       return;
     }
 
-    // Dịch tối đa 3 đoạn song song để giảm độ trễ mà không tạo quá nhiều request
+    // Dịch một số đoạn song song để giảm độ trễ mà không tạo quá nhiều request
     // cùng lúc tới endpoint Google miễn phí.
     const translations = await mapWithConcurrency(
       paragraphs,
-      3,
+      TRANSLATE_CONCURRENCY,
       async (paragraph) => {
         const translated = await translateWithRetry(paragraph.translationInput, targetLang);
         const runs = restoreStyledRuns(translated, paragraph.protectedItems);
@@ -395,16 +405,16 @@ async function captureAndOcr() {
 
     const lines = paragraphs.map((p, index) => {
       // bbox toạ độ pixel trên ảnh đã crop+scale -> quy đổi về CSS px trong cửa sổ.
-      const x0 = p.bbox.x0 / upscale / scale;
-      const y0 = TOOLBAR_HEIGHT + p.bbox.y0 / upscale / scale;
-      const x1 = p.bbox.x1 / upscale / scale;
-      const y1 = TOOLBAR_HEIGHT + p.bbox.y1 / upscale / scale;
+      const x0 = p.bbox.x0 / processingScale / scale;
+      const y0 = TOOLBAR_HEIGHT + p.bbox.y0 / processingScale / scale;
+      const x1 = p.bbox.x1 / processingScale / scale;
+      const y1 = TOOLBAR_HEIGHT + p.bbox.y1 / processingScale / scale;
       return {
         x: x0,
         y: y0,
         width: Math.max(4, x1 - x0),
         height: Math.max(4, y1 - y0),
-        fontHeight: p.uniformHeight / upscale / scale,
+        fontHeight: p.uniformHeight / processingScale / scale,
         original: p.text,
         translated: translations[index].text,
         runs: translations[index].runs,

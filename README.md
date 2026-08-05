@@ -11,7 +11,8 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Kéo và thay đổi kích thước để chọn vùng cần dịch.
 - OCR giữ lại bounding box và cấu trúc đoạn văn.
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.
-- Dịch tối đa ba đoạn song song để giảm độ trễ.
+- Dịch tối đa năm đoạn song song để giảm độ trễ.
+- Chuẩn hóa mật độ ảnh OCR trên Retina để giảm số pixel xử lý mà vẫn giữ tọa độ layout.
 - Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Mở rộng patch quanh bbox, dùng nền kín và typography nhẹ để tăng safe space, tương phản và khả năng đọc đoạn dài.
@@ -50,7 +51,7 @@ npm install
 npm start
 ```
 
-Lần đầu sử dụng một ngôn ngữ OCR, Tesseract có thể cần tải trained data và sẽ mất nhiều thời gian hơn các lần sau.
+Lần đầu sử dụng một ngôn ngữ OCR, Tesseract có thể cần tải trained data và sẽ mất nhiều thời gian hơn các lần sau. Vùng chọn càng sát nội dung thì OCR càng nhanh.
 
 ## Cấp quyền Screen Recording trên macOS
 

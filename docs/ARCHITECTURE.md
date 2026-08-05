@@ -11,7 +11,7 @@ OSLT là một ứng dụng Electron một cửa sổ. Main process chịu trác
 - Tạo `BrowserWindow` trong suốt, không viền và luôn nổi.
 - Lấy bounds cửa sổ để xác định vùng crop.
 - Chụp màn hình bằng `screenshot-desktop`.
-- Crop và upscale ảnh nhỏ bằng Jimp.
+- Crop ảnh và chuẩn hóa mật độ pixel bằng Jimp; Retina được downscale về mục tiêu 1.5 physical pixels/CSS pixel.
 - OCR với Tesseract.js và yêu cầu output `blocks`.
 - Duyệt block → paragraph → line và loại dòng có confidence thấp.
 - Tách paragraph khi khoảng cách dọc giữa hai dòng vượt ngưỡng dựa trên chiều cao chữ trung vị.
@@ -52,7 +52,7 @@ Các token đặc biệt được thay bằng placeholder `__OSLTn__` trước k
 2. `captureAndOcr()` chụp màn hình và crop vùng cửa sổ, trừ toolbar.
 3. Tesseract trả text cùng layout.
 4. App tạo các paragraph logic và bbox bao quanh từng paragraph.
-5. Các paragraph được dịch với concurrency tối đa bằng 3.
+5. Các paragraph được dịch với concurrency tối đa bằng 5.
 6. Nếu generation chưa thay đổi, renderer nhận kết quả và vẽ patch.
 7. `overlayLocked` được bật để ngăn OCR đọc lại chính bản dịch.
 
