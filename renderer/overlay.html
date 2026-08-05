@@ -103,7 +103,7 @@
     background: rgba(17, 17, 22, 0.97);
     color: #f2f2f5;
     font-weight: 500;
-    line-height: 1.18;
+    line-height: 1.1;
     white-space: normal;
     overflow-wrap: break-word;
     text-align: left;
@@ -111,7 +111,7 @@
     border-radius: 2px;
     box-shadow: none;
     text-shadow: none;
-    padding: 2px 3px;
+    padding: 0 3px;
     overflow: hidden;
   }
 
@@ -223,10 +223,10 @@
   }
 
   function fitPatchText(element, line) {
-    const baseSize = Math.max(9, (line.fontHeight || 14) * 0.82);
+    const baseSize = Math.max(9, (line.fontHeight || 14) * 0.9);
     let low = 8;
     // Auto-fit chỉ được thu nhỏ; không phóng chữ vượt quá cỡ ước lượng của chữ gốc.
-    let high = Math.min(48, Math.max(9, baseSize * 1.08));
+    let high = Math.min(48, Math.max(9, baseSize * 1.05));
 
     // Tìm font lớn nhất vẫn nằm trọn trong bbox của đoạn gốc.
     for (let i = 0; i < 10; i++) {
@@ -260,9 +260,18 @@
 
     for (const group of groups) {
       if (group.entries.length < 2) continue;
-      const sharedSize = Math.min(...group.entries.map((entry) => entry.fittedSize));
+      const fittedSizes = group.entries
+        .map((entry) => entry.fittedSize)
+        .sort((a, b) => a - b);
+      const middle = Math.floor(fittedSizes.length / 2);
+      const sharedSize = fittedSizes.length % 2
+        ? fittedSizes[middle]
+        : (fittedSizes[middle - 1] + fittedSizes[middle]) / 2;
+
       for (const entry of group.entries) {
-        entry.element.style.fontSize = sharedSize + 'px';
+        // Dùng cỡ trung vị cho phần lớn nhóm; outlier dài vẫn giữ cỡ fit riêng
+        // để không bị cắt chữ hoặc tràn khỏi bbox.
+        entry.element.style.fontSize = Math.min(sharedSize, entry.fittedSize) + 'px';
       }
     }
   }
