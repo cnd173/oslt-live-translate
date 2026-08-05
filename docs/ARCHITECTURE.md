@@ -35,6 +35,7 @@ Expose API giới hạn qua `contextBridge`:
 - Vẽ mỗi paragraph dưới dạng patch tuyệt đối theo bbox OCR.
 - Dùng binary search để tìm cỡ chữ lớn nhất vừa patch.
 - Không cho auto-fit phóng chữ quá cỡ ước lượng của văn bản gốc.
+- Nhóm các patch có `fontHeight` gần nhau và áp dụng cỡ vừa nhỏ nhất chung trong nhóm để typography đồng đều mà không tràn.
 - Cho phép hiển thị text OCR để đối chiếu.
 
 ## Luồng quét

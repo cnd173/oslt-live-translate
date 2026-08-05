@@ -12,6 +12,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.
 - Dịch tối đa ba đoạn song song để giảm độ trễ.
 - Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
+- Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
 - Không cần API key cho cấu hình mặc định.
@@ -116,7 +117,7 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - Endpoint `translate.googleapis.com` đang được dùng theo cách không chính thức, không có SLA và có thể bị giới hạn tốc độ hoặc thay đổi hành vi.
 - OCR phụ thuộc mạnh vào độ phân giải, độ tương phản, font, hiệu ứng nền và ngôn ngữ được chọn.
-- Font family và style gốc chưa được tái tạo chính xác; ứng dụng chỉ ước lượng cỡ chữ từ chiều cao dòng.
+- Font family và style gốc chưa được tái tạo chính xác; ứng dụng ước lượng cỡ chữ từ chiều cao dòng rồi đồng bộ theo nhóm gần nhau.
 - Bản dịch dài hơn văn bản gốc phải thu nhỏ để vừa bounding box.
 - Toolbar chiếm 30px phía trên cửa sổ và vùng này không được OCR.
 - Chưa có bộ cài ký số hoặc bản phát hành đóng gói.

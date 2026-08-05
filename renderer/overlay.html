@@ -201,6 +201,7 @@
   function renderPatches() {
     patches.innerHTML = '';
     placeholder.style.display = currentLines.length ? 'none' : 'flex';
+    const entries = [];
 
     for (const line of currentLines) {
       const div = document.createElement('div');
@@ -211,8 +212,14 @@
       div.style.height = line.height + 'px';
       div.textContent = (showOriginal ? line.original : line.translated) || '…';
       patches.appendChild(div);
-      fitPatchText(div, line);
+      entries.push({
+        element: div,
+        line,
+        fittedSize: fitPatchText(div, line),
+      });
     }
+
+    applyUniformFontSizes(entries);
   }
 
   function fitPatchText(element, line) {
@@ -231,7 +238,33 @@
       else high = size;
     }
 
-    element.style.fontSize = Math.max(8, low) + 'px';
+    const fittedSize = Math.max(8, low);
+    element.style.fontSize = fittedSize + 'px';
+    return fittedSize;
+  }
+
+  function applyUniformFontSizes(entries) {
+    const sorted = entries
+      .filter(({ line }) => Number.isFinite(line.fontHeight) && line.fontHeight > 0)
+      .sort((a, b) => a.line.fontHeight - b.line.fontHeight);
+    const groups = [];
+
+    for (const entry of sorted) {
+      const group = groups[groups.length - 1];
+      if (!group || entry.line.fontHeight > group.anchorHeight * 1.25) {
+        groups.push({ anchorHeight: entry.line.fontHeight, entries: [entry] });
+      } else {
+        group.entries.push(entry);
+      }
+    }
+
+    for (const group of groups) {
+      if (group.entries.length < 2) continue;
+      const sharedSize = Math.min(...group.entries.map((entry) => entry.fittedSize));
+      for (const entry of group.entries) {
+        entry.element.style.fontSize = sharedSize + 'px';
+      }
+    }
   }
 
   window.overlay.getState().then((state) => {
