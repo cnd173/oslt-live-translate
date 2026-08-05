@@ -13,6 +13,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.
 - Dịch tối đa năm đoạn song song để giảm độ trễ.
 - Chuẩn hóa mật độ ảnh OCR trên Retina để giảm số pixel xử lý mà vẫn giữ tọa độ layout.
+- Vùng ảnh cao được chia làm hai tile overlap và OCR song song bằng hai worker.
 - Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Mở rộng patch quanh bbox, dùng nền kín và typography nhẹ để tăng safe space, tương phản và khả năng đọc đoạn dài.
@@ -130,6 +131,7 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Toolbar chiếm 30px phía trên cửa sổ và vùng này không được OCR.
 - Chưa có bộ cài ký số hoặc bản phát hành đóng gói.
 - Multi-monitor và Windows/Linux chưa được kiểm thử đầy đủ.
+- OCR song song dùng nhiều RAM hơn worker đơn; vùng thấp hơn 900px tự động quay về một worker.
 - Chưa có nhà cung cấp dịch chính thức hoặc cấu hình API key.
 
 Xem cách xử lý lỗi thường gặp tại [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

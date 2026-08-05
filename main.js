@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const os = require('os');
 const path = require('path');
 const screenshot = require('screenshot-desktop');
 const { Jimp, intToRGBA } = require('jimp');
@@ -14,9 +15,11 @@ const MAX_LINES = 60;
 const TOOLBAR_HEIGHT = 30;
 const OCR_TARGET_PIXEL_RATIO = 1.5;
 const TRANSLATE_CONCURRENCY = 5;
+const OCR_WORKER_COUNT = Math.min(2, Math.max(1, os.availableParallelism() - 1));
+const OCR_PARALLEL_MIN_HEIGHT = 900;
 
 let overlayWin = null;
-let worker = null;
+let workers = [];
 let captureTimer = null;
 
 let ocrLang = 'eng';
@@ -81,6 +84,12 @@ function scheduleScan() {
   refreshTimer = setTimeout(requestScan, 400);
 }
 
+function createOcrWorkers(lang) {
+  return Promise.all(
+    Array.from({ length: OCR_WORKER_COUNT }, () => createWorker(lang))
+  );
+}
+
 async function translateText(text, tl) {
   const url =
     'https://translate.googleapis.com/translate_a/single' +
@@ -136,6 +145,102 @@ function flattenParagraphs(page) {
     }
   }
   return paragraphs;
+}
+
+function offsetBbox(bbox, offsetY) {
+  return {
+    x0: bbox.x0,
+    y0: bbox.y0 + offsetY,
+    x1: bbox.x1,
+    y1: bbox.y1 + offsetY,
+  };
+}
+
+function offsetLine(line, offsetY) {
+  return {
+    ...line,
+    bbox: offsetBbox(line.bbox, offsetY),
+    baseline: line.baseline ? {
+      ...line.baseline,
+      y0: line.baseline.y0 + offsetY,
+      y1: line.baseline.y1 + offsetY,
+    } : line.baseline,
+    words: (line.words || []).map((word) => ({
+      ...word,
+      bbox: offsetBbox(word.bbox, offsetY),
+    })),
+  };
+}
+
+function pageGroups(page, offsetY = 0, keepLine = () => true) {
+  return flattenParagraphs(page)
+    .map((lines) => lines
+      .filter((line) => keepLine(line, offsetY))
+      .map((line) => offsetLine(line, offsetY)))
+    .filter((lines) => lines.length)
+    .flatMap((lines) => splitParagraphByVerticalGap(lines));
+}
+
+function mergeTileBoundary(topGroups, bottomGroups) {
+  if (!topGroups.length || !bottomGroups.length) return [...topGroups, ...bottomGroups];
+
+  const top = topGroups[topGroups.length - 1];
+  const bottom = bottomGroups[0];
+  const previous = top[top.length - 1];
+  const next = bottom[0];
+  const heights = [
+    previous.bbox.y1 - previous.bbox.y0,
+    next.bbox.y1 - next.bbox.y0,
+  ];
+  const maxGap = Math.max(8, median(heights) * 0.75);
+  const aligned = Math.abs(previous.bbox.x0 - next.bbox.x0) <= median(heights) * 2;
+
+  if (next.bbox.y0 - previous.bbox.y1 <= maxGap && aligned) {
+    topGroups[topGroups.length - 1] = [...top, ...bottom];
+    return [...topGroups, ...bottomGroups.slice(1)];
+  }
+  return [...topGroups, ...bottomGroups];
+}
+
+async function recognizeParagraphGroups(image) {
+  if (workers.length < 2 || image.bitmap.height < OCR_PARALLEL_MIN_HEIGHT) {
+    const buffer = await image.getBuffer('image/png');
+    const { data } = await workers[0].recognize(buffer, {}, { blocks: true });
+    return pageGroups(data);
+  }
+
+  const splitY = Math.floor(image.bitmap.height / 2);
+  const overlap = Math.min(90, Math.max(48, Math.floor(image.bitmap.height * 0.04)));
+  const bottomY = Math.max(0, splitY - overlap);
+  const topHeight = Math.min(image.bitmap.height, splitY + overlap);
+  const bottomHeight = image.bitmap.height - bottomY;
+  const topImage = image.clone().crop({ x: 0, y: 0, w: image.bitmap.width, h: topHeight });
+  const bottomImage = image.clone().crop({
+    x: 0,
+    y: bottomY,
+    w: image.bitmap.width,
+    h: bottomHeight,
+  });
+  const [topBuffer, bottomBuffer] = await Promise.all([
+    topImage.getBuffer('image/png'),
+    bottomImage.getBuffer('image/png'),
+  ]);
+  const [topResult, bottomResult] = await Promise.all([
+    workers[0].recognize(topBuffer, {}, { blocks: true }),
+    workers[1].recognize(bottomBuffer, {}, { blocks: true }),
+  ]);
+
+  const topGroups = pageGroups(
+    topResult.data,
+    0,
+    (line) => (line.bbox.y0 + line.bbox.y1) / 2 < splitY
+  );
+  const bottomGroups = pageGroups(
+    bottomResult.data,
+    bottomY,
+    (line, offsetY) => (line.bbox.y0 + line.bbox.y1) / 2 + offsetY >= splitY
+  );
+  return mergeTileBoundary(topGroups, bottomGroups);
 }
 
 function median(values) {
@@ -289,9 +394,10 @@ function paragraphAvgHeight(paraLines) {
 
 async function captureAndOcr() {
   if (paused || switchingLang || capturing || overlayLocked) return;
-  if (!overlayWin || overlayWin.isDestroyed() || !worker) return;
+  if (!overlayWin || overlayWin.isDestroyed() || !workers.length) return;
 
   const generation = scanGeneration;
+  const scanStartedAt = Date.now();
   capturing = true;
   try {
     const bounds = overlayWin.getBounds();
@@ -299,6 +405,7 @@ async function captureAndOcr() {
     const scale = display.scaleFactor || 1;
 
     const imgBuffer = await screenshot({ format: 'png' });
+    const capturedAt = Date.now();
     const image = await Jimp.read(imgBuffer);
 
     const maxW = image.bitmap.width;
@@ -331,15 +438,13 @@ async function captureAndOcr() {
     }
     if (Math.abs(processingScale - 1) >= 0.05) image.scale(processingScale);
 
-    const buf = await image.getBuffer('image/png');
-    const { data } = await worker.recognize(buf, {}, { blocks: true });
+    const paragraphGroups = await recognizeParagraphGroups(image);
+    const recognizedAt = Date.now();
 
     // Gộp các dòng cùng 1 đoạn (paragraph) thành 1 khối văn bản liền mạch để
     // dịch giữ đúng ngữ cảnh/liên kết câu, thay vì dịch rời từng dòng riêng lẻ.
     let paragraphs = [];
     let totalLinesUsed = 0;
-    const paragraphGroups = flattenParagraphs(data)
-      .flatMap((paraLines) => splitParagraphByVerticalGap(paraLines));
 
     for (const paraLines of paragraphGroups) {
       if (totalLinesUsed >= MAX_LINES) break;
@@ -425,6 +530,13 @@ async function captureAndOcr() {
 
     sendTranslation(lines);
     overlayLocked = true;
+    const finishedAt = Date.now();
+    console.log(
+      `[scan] capture=${capturedAt - scanStartedAt}ms ` +
+      `ocr=${recognizedAt - capturedAt}ms ` +
+      `translate=${finishedAt - recognizedAt}ms total=${finishedAt - scanStartedAt}ms ` +
+      `workers=${workers.length}`
+    );
   } catch (err) {
     console.error('OCR/translate error:', err);
     sendStatus('error');
@@ -437,11 +549,11 @@ async function setOcrLanguage(lang) {
   switchingLang = true;
   sendStatus('loading-lang');
   try {
-    if (worker && typeof worker.reinitialize === 'function') {
-      await worker.reinitialize(lang);
+    if (workers.length && workers.every((worker) => typeof worker.reinitialize === 'function')) {
+      await Promise.all(workers.map((worker) => worker.reinitialize(lang)));
     } else {
-      if (worker) await worker.terminate();
-      worker = await createWorker(lang);
+      await Promise.all(workers.map((worker) => worker.terminate()));
+      workers = await createOcrWorkers(lang);
     }
     ocrLang = lang;
     requestScan();
@@ -480,7 +592,7 @@ app.whenReady().then(async () => {
   overlayWin = createOverlayWindow();
 
   sendStatus('loading-lang');
-  worker = await createWorker(ocrLang);
+  workers = await createOcrWorkers(ocrLang);
   sendStatus('ok');
 
   requestScan();
@@ -499,9 +611,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async () => {
   if (captureTimer) clearInterval(captureTimer);
-  if (worker) {
+  if (workers.length) {
     try {
-      await worker.terminate();
+      await Promise.all(workers.map((worker) => worker.terminate()));
     } catch {
       // ignore
     }

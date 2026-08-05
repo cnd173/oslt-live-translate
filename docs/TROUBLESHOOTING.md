@@ -57,3 +57,5 @@ Phiên bản hiện tại không bật Electron content protection, vì vậy sc
 - Đợi scan hoàn tất; sau khi khóa, OCR không tiếp tục chạy.
 - Không bấm refresh liên tục.
 - Thoát các instance Electron cũ còn chạy nền.
+
+Ảnh cao dùng hai OCR worker để giảm thời gian chờ và sẽ tốn thêm RAM. Ảnh thấp tự dùng một worker. Terminal hiển thị timing sau mỗi scan để xác định capture, OCR hay translate đang chậm.

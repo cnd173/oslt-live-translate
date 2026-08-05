@@ -13,6 +13,7 @@ OSLT là một ứng dụng Electron một cửa sổ. Main process chịu trác
 - Chụp màn hình bằng `screenshot-desktop`.
 - Crop ảnh và chuẩn hóa mật độ pixel bằng Jimp; Retina được downscale về mục tiêu 1.5 physical pixels/CSS pixel.
 - OCR với Tesseract.js và yêu cầu output `blocks`.
+- Dùng pool tối đa hai Tesseract worker; ảnh cao được chia thành hai tile có overlap và OCR song song.
 - Duyệt block → paragraph → line và loại dòng có confidence thấp.
 - Tách paragraph khi khoảng cách dọc giữa hai dòng vượt ngưỡng dựa trên chiều cao chữ trung vị.
 - Dịch paragraph với tối đa ba request đồng thời.
@@ -57,6 +58,8 @@ Các token đặc biệt được thay bằng placeholder `__OSLTn__` trước k
 7. `overlayLocked` được bật để ngăn OCR đọc lại chính bản dịch.
 
 Kéo/resize được debounce 400ms trước khi yêu cầu quét mới. Nút refresh và thay đổi ngôn ngữ cũng tạo một generation mới, nhờ đó kết quả từ tác vụ cũ không thể ghi đè lên tác vụ mới.
+
+Với ảnh xử lý cao từ 900px, pipeline chia ngang thành hai tile có overlap 48–90px. Dòng trong overlap được phân cho tile theo tâm bbox để tránh trùng. Hai nhóm paragraph giáp ranh được nối lại khi khoảng cách dòng và căn trái cho thấy chúng thuộc cùng đoạn. Terminal in timing `capture`, `ocr`, `translate` và `total` sau mỗi scan.
 
 ## Hệ tọa độ
 
