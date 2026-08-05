@@ -7,6 +7,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 ## Tính năng
 
 - Một cửa sổ trong suốt, luôn nổi trên các ứng dụng khác.
+- Cửa sổ ở mức `floating`, nằm dưới các giao diện hệ thống như macOS Spotlight.
 - Kéo và thay đổi kích thước để chọn vùng cần dịch.
 - OCR giữ lại bounding box và cấu trúc đoạn văn.
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.

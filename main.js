@@ -43,7 +43,8 @@ function createOverlayWindow() {
       contextIsolation: true,
     },
   });
-  win.setAlwaysOnTop(true, 'screen-saver');
+  // Nổi trên app thông thường nhưng không che các giao diện hệ thống như Spotlight.
+  win.setAlwaysOnTop(true, 'floating');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   // Không bật content protection: người dùng vẫn cần chụp được overlay bằng công cụ hệ thống.
   win.loadFile(path.join(__dirname, 'renderer', 'overlay.html'));
