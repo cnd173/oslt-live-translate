@@ -124,7 +124,7 @@ Mặc định app dùng endpoint Google Translate-compatible không cần API ke
 OSLT_TRANSLATE_ENDPOINT=https://your-proxy.example/translate npm start
 ```
 
-Với môi trường dùng lâu dài, nên chọn API chính thức. Không commit các key này vào repository:
+Với môi trường dùng lâu dài, nên chọn API chính thức. Nếu chỉ đặt `OSLT_GOOGLE_CLOUD_API_KEY` hoặc `OSLT_DEEPL_API_KEY` mà không đặt `OSLT_TRANSLATOR`, app sẽ tự ưu tiên provider chính thức tương ứng. Không commit các key này vào repository:
 
 Có thể sao chép [`.env.example`](.env.example) để làm danh sách cấu hình; OSLT đọc biến môi trường của tiến trình và không tự đọc/ghi file `.env`.
 
@@ -167,7 +167,9 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Trên máy Mac, chạy `npm run package:mac` để build helper ScreenCaptureKit và tạo DMG trong thư mục `release/`. Bản build mặc định là unsigned; người dùng cần cấp quyền Screen Recording cho OSLT sau khi cài.
 
-Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.1`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ chạy test, build native helper và upload DMG tuần tự vào GitHub Release bằng `GITHUB_TOKEN`. Ký code/notarization chưa bật; muốn bật cần cấu hình certificate secrets riêng cho repository.
+Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.2`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) chạy test và build song song DMG `arm64` + `x64`, sau đó upload tuần tự vào GitHub Release bằng `GITHUB_TOKEN`.
+
+Để bật ký code/notarization, thêm các GitHub Actions secrets: `MACOS_CSC_LINK` (base64 `.p12` Developer ID Application), `MACOS_CSC_KEY_PASSWORD`, `APPLE_API_KEY` (base64 `.p8` App Store Connect), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` và `APPLE_TEAM_ID`. Nếu chưa có các secrets này, workflow vẫn tạo DMG unsigned.
 
 ## Giới hạn đã biết
 

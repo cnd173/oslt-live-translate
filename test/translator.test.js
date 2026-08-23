@@ -5,6 +5,7 @@ const {
   parseDeepLResponse,
   parseGoogleCloudResponse,
   parseGoogleCompatibleResponse,
+  resolveProvider,
 } = require('../lib/translator');
 
 test('parses Google-compatible translation segments', () => {
@@ -96,4 +97,15 @@ test('allows an HTTP localhost translator proxy for development', async () => {
 
   assert.equal(await translator.translate('Hello', 'vi'), 'Xin chào');
   assert.match(requestedUrl, /^http:\/\/localhost:8787\/translate/);
+});
+
+test('prefers an official provider when its API key is configured', () => {
+  assert.equal(resolveProvider(undefined, {
+    OSLT_GOOGLE_CLOUD_API_KEY: 'google-key',
+    OSLT_DEEPL_API_KEY: 'deepl-key',
+  }), 'google-cloud');
+  assert.equal(resolveProvider(undefined, {
+    OSLT_DEEPL_API_KEY: 'deepl-key',
+  }), 'deepl');
+  assert.equal(resolveProvider(undefined, {}), 'google-compatible');
 });

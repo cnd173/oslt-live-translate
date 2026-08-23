@@ -9,9 +9,17 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and publish DMG
-    runs-on: macos-latest
+  build:
+    name: Build ${{ matrix.arch }} DMG
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x64
+          - runner: macos-14
+            arch: arm64
 
     steps:
       - name: Check out repository
@@ -29,8 +37,37 @@ jobs:
       - name: Verify source
         run: npm test
 
-      - name: Build DMG
-        run: npm run package:mac
+      - name: Build ${{ matrix.arch }} DMG
+        run: npm run package:mac -- --${{ matrix.arch }}
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oslt-dmg-${{ matrix.arch }}
+          path: |
+            release/OSLT-*.dmg
+            release/OSLT-*.dmg.blockmap
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: macos-14
+
+    steps:
+      - name: Download DMG artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: oslt-dmg-*
+          path: release
+          merge-multiple: true
 
       - name: Create GitHub Release and upload artifacts
         run: >-

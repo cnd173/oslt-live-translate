@@ -21,4 +21,5 @@ Không đăng công khai token, dữ liệu màn hình nhạy cảm hoặc chi t
 - Không đặt overlay lên mật khẩu, khóa khôi phục, tài liệu mật hoặc dữ liệu cá nhân nếu không chấp nhận việc text OCR được gửi tới dịch vụ bên thứ ba.
 - Endpoint dịch mặc định là không chính thức và không phù hợp cho dữ liệu nhạy cảm hoặc môi trường production.
 - Endpoint tùy chỉnh phải dùng HTTPS; chỉ proxy HTTP trên localhost được cho phép để phát triển.
+- Release macOS nên được ký bằng Developer ID và notarize trước khi phân phối rộng rãi.
 - Screen Recording permission cho phép tiến trình chụp nội dung màn hình; chỉ chạy code từ nguồn tin cậy.

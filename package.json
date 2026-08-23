@@ -1,6 +1,6 @@
 {
   "name": "oslt-live-translate",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Desktop OCR translation overlay that preserves paragraph positions on screen",
   "main": "main.js",
   "scripts": {
@@ -53,6 +53,7 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
       "target": [
         "dmg"
       ]
