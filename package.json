@@ -30,12 +30,12 @@
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^43.3.0",
+    "electron": "^43.4.1",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "jimp": "^1.6.1",
-    "screenshot-desktop": "^1.15.4",
+    "screenshot-desktop": "^1.15.6",
     "tesseract.js": "^7.0.0"
   },
   "build": {
