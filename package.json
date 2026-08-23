@@ -11,6 +11,14 @@
     "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js && node --check lib/promise-cache.js && node --check lib/image-signature.js && node --check lib/layout.js && node --check lib/translator.js && node --check lib/screen-capture.js && node --check scripts/build-native-capture.js && node --check scripts/benchmark.js",
     "test": "npm run check && node --test"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cnd173/oslt-live-translate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cnd173/oslt-live-translate/issues"
+  },
+  "homepage": "https://github.com/cnd173/oslt-live-translate#readme",
   "keywords": [
     "electron",
     "ocr",

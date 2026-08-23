@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -61,7 +61,7 @@ jobs:
         run: npm run package:mac -- --${{ matrix.arch }}
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: oslt-dmg-${{ matrix.arch }}
           path: |
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Download DMG artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: oslt-dmg-*
           path: release

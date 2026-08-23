@@ -1,5 +1,7 @@
 # OSLT — Overlay Screen Live Translate
 
+[English](README.en.md) · [Tiếng Việt](README.md)
+
 OSLT is a lightweight Electron overlay that captures a selected screen region, recognizes its text with Tesseract.js, translates each detected paragraph, and draws the translation back over the original layout.
 
 > Dự án đang ở giai đoạn prototype. macOS là nền tảng được kiểm thử chính; Windows và Linux chưa được xác minh đầy đủ.
@@ -161,13 +163,13 @@ Google-compatible / Google Cloud / DeepL
 IPC → positioned HTML translation patches
 ```
 
-Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) và lịch sử thay đổi tại [CHANGELOG.md](CHANGELOG.md).
 
 ## Phát hành macOS
 
 Trên máy Mac, chạy `npm run package:mac` để build helper ScreenCaptureKit và tạo DMG trong thư mục `release/`. Bản build mặc định là unsigned; người dùng cần cấp quyền Screen Recording cho OSLT sau khi cài.
 
-Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.2`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) chạy test và build song song DMG `arm64` + `x64`, sau đó upload tuần tự vào GitHub Release bằng `GITHUB_TOKEN`.
+Maintainer có thể tạo release tự động bằng cách push tag dạng `v*` (ví dụ `v1.0.2`). Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) chạy test và build song song DMG `arm64` + `x64`, sau đó upload tuần tự vào GitHub Release bằng `GITHUB_TOKEN`.
 
 Để bật ký code/notarization, thêm các GitHub Actions secrets: `MACOS_CSC_LINK` (base64 `.p12` Developer ID Application), `MACOS_CSC_KEY_PASSWORD`, `APPLE_API_KEY` (base64 `.p8` App Store Connect), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` và `APPLE_TEAM_ID`. Nếu chưa có các secrets này, workflow vẫn tạo DMG unsigned.
 
