@@ -8,6 +8,8 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 
 - Một cửa sổ trong suốt, luôn nổi trên các ứng dụng khác.
 - Cửa sổ ở mức `floating`, nằm dưới các giao diện hệ thống như macOS Spotlight.
+- Capture trực tiếp đúng vùng chọn để giảm thời gian xử lý; tự fallback khi hệ thống không hỗ trợ.
+- Chế độ `◎` live tùy chọn trên macOS: native ScreenCaptureKit loại trừ chính overlay, nên không OCR vòng lặp và không chớp tắt.
 - Kéo và thay đổi kích thước để chọn vùng cần dịch.
 - OCR giữ lại bounding box và cấu trúc đoạn văn.
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.
@@ -18,6 +20,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Mở rộng patch quanh bbox, dùng nền kín và typography nhẹ để tăng safe space, tương phản và khả năng đọc đoạn dài.
 - Nhận diện word-level cho code/URL, nền xám và chữ xanh; giữ nguyên token kỹ thuật qua placeholder khi dịch.
+- Cache kết quả dịch và cache cả request đang chạy để các vòng live không gửi lại cùng một đoạn lên mạng.
 - Có nút bật/tắt Preserve styles và fallback về plain text nếu placeholder bị mất.
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
@@ -35,6 +38,8 @@ Sau một lần dịch thành công, OSLT **khóa kết quả** thay vì tiếp 
 
 Vì vậy, “live” trong phiên bản hiện tại nghĩa là quét nhanh theo vùng và cập nhật có kiểm soát, chưa phải OCR liên tục từng khung hình.
 
+Trên macOS, sau khi build native helper, nút `◎` bật live an toàn. Chế độ này vẫn quét theo chu kỳ 1,5 giây nhưng giữ patch cũ nếu OCR tạm thời rỗng và không render lại khi nội dung nguồn không đổi. Nếu chưa build helper, nút này bị vô hiệu hóa và app dùng chế độ khóa ổn định.
+
 ## Yêu cầu
 
 - Node.js 18 trở lên;
@@ -49,6 +54,7 @@ Vì vậy, “live” trong phiên bản hiện tại nghĩa là quét nhanh the
 git clone https://github.com/cnd173/oslt-live-translate.git
 cd oslt-live-translate
 npm install
+npm run build:native   # macOS, bật capture loại trừ overlay (không bắt buộc)
 npm start
 ```
 
@@ -83,6 +89,7 @@ Nếu không có quyền, chấm trạng thái trên toolbar chuyển sang màu 
 | `EN`, `VI`, ... | Ngôn ngữ chữ nguồn cho Tesseract |
 | `→VI`, `→EN`, ... | Ngôn ngữ bản dịch |
 | `↻` | Xóa kết quả hiện tại và quét lại |
+| `◎` | Bật/tắt live an toàn trên macOS sau khi build native helper |
 | `◐` | Bật/tắt giữ nền code và màu link |
 | `Aa` | Chuyển giữa bản dịch và văn bản OCR |
 | `⏸` / `▶` | Tạm dừng hoặc tiếp tục |
@@ -98,6 +105,7 @@ Ngôn ngữ đích hiện có: Việt, Anh, Nhật, Trung giản thể, Hàn, Ph
 
 ```bash
 npm start       # chạy ứng dụng Electron
+npm run build:native # build helper ScreenCaptureKit trên macOS
 npm run check   # kiểm tra cú pháp JavaScript
 npm test        # chạy kiểm tra hiện có
 ```
@@ -106,13 +114,13 @@ npm test        # chạy kiểm tra hiện có
 
 ```text
 Screen region
-    ↓ screenshot-desktop
+    ↓ ScreenCaptureKit native (hoặc screencapture / full-screen fallback)
 Jimp crop / optional upscale
     ↓
 Tesseract.js OCR + bounding boxes
     ↓
 Paragraph grouping and gap splitting
-    ↓
+    ↓ translation cache
 Google Translate-compatible endpoint
     ↓
 IPC → positioned HTML translation patches
@@ -132,6 +140,7 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Chưa có bộ cài ký số hoặc bản phát hành đóng gói.
 - Multi-monitor và Windows/Linux chưa được kiểm thử đầy đủ.
 - OCR song song dùng nhiều RAM hơn worker đơn; vùng thấp hơn 900px tự động quay về một worker.
+- Live an toàn cần macOS 14 trở lên và binary `native/bin/oslt-region-capture`; nếu ScreenCaptureKit lỗi runtime, app tự tắt live để tránh đọc nhầm patch.
 - Chưa có nhà cung cấp dịch chính thức hoặc cấu hình API key.
 
 Xem cách xử lý lỗi thường gặp tại [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

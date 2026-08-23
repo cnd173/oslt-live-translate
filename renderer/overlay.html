@@ -58,6 +58,7 @@
   .status-dot.loading-lang { background: #fbbf24; }
   .status-dot.paused { background: #9ca3af; }
   .status-dot.error { background: #f87171; }
+  .status-dot.live-unavailable { background: #fb923c; }
 
   .spacer { flex: 1; -webkit-app-region: drag; min-width: 4px; height: 100%; }
 
@@ -90,6 +91,7 @@
     padding: 0;
   }
   .icon-btn:hover { background: rgba(255,255,255,0.2); }
+  .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .icon-btn.active { background: rgba(129, 140, 248, 0.55); }
   .icon-btn.close:hover { background: rgba(248, 113, 113, 0.6); }
 
@@ -177,6 +179,7 @@
         </select>
         <div class="spacer"></div>
         <button class="icon-btn" id="refreshBtn" title="Quét và dịch lại">↻</button>
+        <button class="icon-btn" id="liveBtn" title="Bật live an toàn">◎</button>
         <button class="icon-btn active" id="styleBtn" title="Bật / tắt giữ style code và link">◐</button>
         <button class="icon-btn" id="toggleOriginalBtn" title="Hiện văn bản gốc thay vì bản dịch">Aa</button>
         <button class="icon-btn" id="pauseBtn" title="Tạm dừng / tiếp tục">⏸</button>
@@ -193,6 +196,7 @@
   const targetLangSelect = document.getElementById('targetLangSelect');
   const pauseBtn = document.getElementById('pauseBtn');
   const refreshBtn = document.getElementById('refreshBtn');
+  const liveBtn = document.getElementById('liveBtn');
   const styleBtn = document.getElementById('styleBtn');
   const closeBtn = document.getElementById('closeBtn');
   const toggleOriginalBtn = document.getElementById('toggleOriginalBtn');
@@ -203,18 +207,27 @@
   let currentLines = [];
   let showOriginal = false;
   let preserveStyles = true;
+  let liveMode = false;
+  let liveAvailable = false;
 
   const STATUS_TITLE = {
     ok: 'Đang theo dõi vùng chữ…',
     'loading-lang': 'Đang tải dữ liệu ngôn ngữ OCR…',
     paused: 'Đã tạm dừng',
     error: 'Lỗi khi nhận diện hoặc dịch văn bản',
+    'live-unavailable': 'Live cần native capture macOS; hãy chạy npm run build:native',
   };
 
   function applyStatus(status) {
     statusDot.className = 'status-dot ' + status;
     statusDot.title = STATUS_TITLE[status] || status;
     pauseBtn.textContent = status === 'paused' ? '▶' : '⏸';
+    if (status === 'live-unavailable') {
+      liveMode = false;
+      liveAvailable = false;
+      liveBtn.disabled = true;
+      liveBtn.classList.remove('active');
+    }
   }
 
   function renderPatches() {
@@ -322,6 +335,13 @@
   window.overlay.getState().then((state) => {
     if (state.ocrLang) ocrLangSelect.value = state.ocrLang;
     if (state.targetLang) targetLangSelect.value = state.targetLang;
+    liveMode = Boolean(state.liveMode);
+    liveAvailable = Boolean(state.liveAvailable);
+    liveBtn.disabled = !liveAvailable;
+    liveBtn.classList.toggle('active', liveMode);
+    liveBtn.title = liveAvailable
+      ? 'Bật / tắt live an toàn, không OCR lại bản dịch'
+      : 'Live cần chạy npm run build:native trên macOS';
     applyStatus(state.paused ? 'paused' : 'ok');
   });
 
@@ -335,6 +355,12 @@
 
   pauseBtn.addEventListener('click', () => window.overlay.togglePause());
   refreshBtn.addEventListener('click', () => window.overlay.refresh());
+  liveBtn.addEventListener('click', () => {
+    if (!liveAvailable) return;
+    liveMode = !liveMode;
+    liveBtn.classList.toggle('active', liveMode);
+    window.overlay.setLiveMode(liveMode);
+  });
   styleBtn.addEventListener('click', () => {
     preserveStyles = !preserveStyles;
     styleBtn.classList.toggle('active', preserveStyles);

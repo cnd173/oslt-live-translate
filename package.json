@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js",
+    "build:native": "node scripts/build-native-capture.js",
+    "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js && node --check lib/promise-cache.js && node --check lib/screen-capture.js && node --check scripts/build-native-capture.js",
     "test": "npm run check && node --test"
   },
   "keywords": [

@@ -21,3 +21,4 @@ dist/
 out/
 release/
 coverage/
+native/bin/

@@ -23,9 +23,13 @@ Kéo trực tiếp toolbar tím ở phía trên. Các nút và menu dùng `no-dr
 
 Tesseract có thể đang tải trained data cho ngôn ngữ OCR. Những lần sau thường nhanh hơn. Vùng quét càng lớn thì OCR càng tốn thời gian; nên chỉ bao vùng cần dịch.
 
+Trên macOS, chạy thêm `npm run build:native` để capture đúng vùng thay vì chụp toàn màn hình. Worker OCR thứ hai chỉ được nạp khi vùng ảnh đủ cao; đây là chủ ý để giảm thời gian khởi động và RAM.
+
 ## Nội dung bên dưới thay đổi nhưng bản dịch không đổi
 
 Đây là hành vi chủ ý. OSLT khóa kết quả sau một lần dịch để tránh OCR đọc lại overlay. Bấm `↻`, đổi ngôn ngữ hoặc di chuyển/resize cửa sổ để quét lại.
+
+Nếu muốn theo dõi tự động, chạy `npm run build:native` rồi bật nút `◎`. Live chỉ cập nhật khi OCR thấy nội dung nguồn khác; cache dịch giúp đoạn cũ không tạo request mới.
 
 ## Layout không khớp hoàn toàn
 
@@ -52,6 +56,8 @@ Nhấn `Aa` để kiểm tra text OCR. Nếu OCR đã sai, hãy chọn đúng ng
 Phiên bản hiện tại không bật Electron content protection, vì vậy screenshot hệ thống phải chứa overlay. Hãy chắc chắn đang chạy code mới nhất và không còn một instance cũ. Thoát tất cả instance rồi chạy lại `npm start`.
 
 ## CPU cao
+
+Native live capture không dùng content protection, nên không làm mất overlay khỏi screenshot hệ thống. Nếu live bị tắt sau khi chạy, helper ScreenCaptureKit đã lỗi hoặc quyền Screen Recording bị thu hồi; app tự tắt live để tránh kết quả sai.
 
 - Giảm kích thước vùng quét.
 - Đợi scan hoàn tất; sau khi khóa, OCR không tiếp tục chạy.

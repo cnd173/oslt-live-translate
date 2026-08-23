@@ -1,9 +1,13 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
-const screenshot = require('screenshot-desktop');
 const { Jimp, intToRGBA } = require('jimp');
 const { createWorker } = require('tesseract.js');
+const { createPromiseCache } = require('./lib/promise-cache');
+const {
+  captureScreenRegion,
+  hasNativeOverlayCapture,
+} = require('./lib/screen-capture');
 const {
   createTranslationPlan,
   restoreStyledRuns,
@@ -15,8 +19,10 @@ const MAX_LINES = 60;
 const TOOLBAR_HEIGHT = 30;
 const OCR_TARGET_PIXEL_RATIO = 1.5;
 const TRANSLATE_CONCURRENCY = 5;
-const OCR_WORKER_COUNT = Math.min(2, Math.max(1, os.availableParallelism() - 1));
+const MAX_OCR_WORKERS = Math.min(2, Math.max(1, os.availableParallelism() - 1));
 const OCR_PARALLEL_MIN_HEIGHT = 900;
+const LIVE_EMPTY_SCANS_TO_CLEAR = 2;
+const TRANSLATION_CACHE_LIMIT = 256;
 
 let overlayWin = null;
 let workers = [];
@@ -28,8 +34,12 @@ let paused = false;
 let capturing = false;
 let switchingLang = false;
 let overlayLocked = false;
+let liveMode = false;
 let scanGeneration = 0;
 let refreshTimer = null;
+let lastSourceSignature = '';
+let emptyLiveScans = 0;
+const translationCache = createPromiseCache(TRANSLATION_CACHE_LIMIT);
 
 function createOverlayWindow() {
   const win = new BrowserWindow({
@@ -72,10 +82,12 @@ function sendTranslation(lines) {
   }
 }
 
-function requestScan() {
+function requestScan({ clearOverlay = true } = {}) {
   scanGeneration += 1;
   overlayLocked = false;
-  sendTranslation([]);
+  lastSourceSignature = '';
+  emptyLiveScans = 0;
+  if (clearOverlay) sendTranslation([]);
   setTimeout(captureAndOcr, 100);
 }
 
@@ -84,10 +96,16 @@ function scheduleScan() {
   refreshTimer = setTimeout(requestScan, 400);
 }
 
-function createOcrWorkers(lang) {
+function createOcrWorkers(lang, count = MAX_OCR_WORKERS) {
   return Promise.all(
-    Array.from({ length: OCR_WORKER_COUNT }, () => createWorker(lang))
+    Array.from({ length: count }, () => createWorker(lang))
   );
+}
+
+async function ensureOcrWorkerCount(count, lang = ocrLang) {
+  if (workers.length >= count) return;
+  const additional = await createOcrWorkers(lang, count - workers.length);
+  workers.push(...additional);
 }
 
 async function translateText(text, tl) {
@@ -106,6 +124,19 @@ function sleep(ms) {
 
 // Dịch 1 đoạn văn bản, có retry nhẹ nếu endpoint free của Google tạm thời lỗi/giới hạn tốc độ.
 async function translateWithRetry(text, tl, attempts = 3) {
+  const cacheKey = `${tl}\u0000${text}`;
+  try {
+    return await translationCache.getOrCreate(
+      cacheKey,
+      () => translateWithRetryUncached(text, tl, attempts)
+    );
+  } catch (error) {
+    console.error('Translate giving up, keep original text:', error);
+    return text;
+  }
+}
+
+async function translateWithRetryUncached(text, tl, attempts = 3) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -116,8 +147,7 @@ async function translateWithRetry(text, tl, attempts = 3) {
       await sleep(300 * (i + 1));
     }
   }
-  console.error('Translate giving up, keep original text:', lastErr);
-  return text;
+  throw lastErr;
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -203,11 +233,13 @@ function mergeTileBoundary(topGroups, bottomGroups) {
 }
 
 async function recognizeParagraphGroups(image) {
-  if (workers.length < 2 || image.bitmap.height < OCR_PARALLEL_MIN_HEIGHT) {
+  if (image.bitmap.height < OCR_PARALLEL_MIN_HEIGHT || MAX_OCR_WORKERS < 2) {
     const buffer = await image.getBuffer('image/png');
     const { data } = await workers[0].recognize(buffer, {}, { blocks: true });
     return pageGroups(data);
   }
+
+  await ensureOcrWorkerCount(2);
 
   const splitY = Math.floor(image.bitmap.height / 2);
   const overlap = Math.min(90, Math.max(48, Math.floor(image.bitmap.height * 0.04)));
@@ -285,7 +317,7 @@ function analyzeWordPixels(image, bbox) {
   const height = y1 - y0;
   if (width < 2 || height < 2) return null;
 
-  const stride = Math.max(1, Math.floor(Math.min(width, height) / 12));
+  const stride = Math.max(1, Math.ceil(Math.sqrt((width * height) / 64)));
   const samples = [];
   const buckets = new Map();
 
@@ -393,7 +425,7 @@ function paragraphAvgHeight(paraLines) {
 }
 
 async function captureAndOcr() {
-  if (paused || switchingLang || capturing || overlayLocked) return;
+  if (paused || switchingLang || capturing || (!liveMode && overlayLocked)) return;
   if (!overlayWin || overlayWin.isDestroyed() || !workers.length) return;
 
   const generation = scanGeneration;
@@ -404,29 +436,46 @@ async function captureAndOcr() {
     const display = screen.getDisplayMatching(bounds);
     const scale = display.scaleFactor || 1;
 
-    const imgBuffer = await screenshot({ format: 'png' });
+    const captureBounds = {
+      x: bounds.x,
+      y: bounds.y + TOOLBAR_HEIGHT,
+      width: bounds.width,
+      height: Math.max(1, bounds.height - TOOLBAR_HEIGHT),
+    };
+    const captureResult = await captureScreenRegion(captureBounds, {
+      excludeOverlay: liveMode,
+    });
     const capturedAt = Date.now();
-    const image = await Jimp.read(imgBuffer);
+    if (liveMode && !captureResult.isOverlayExcluded) {
+      liveMode = false;
+      overlayLocked = true;
+      sendStatus('live-unavailable');
+      return;
+    }
+    const image = await Jimp.read(captureResult.buffer);
 
     const maxW = image.bitmap.width;
     const maxH = image.bitmap.height;
 
-    const relX = Math.round((bounds.x - display.bounds.x) * scale);
-    const relY = Math.round((bounds.y - display.bounds.y + TOOLBAR_HEIGHT) * scale);
-    const w = Math.round(bounds.width * scale);
-    const h = Math.round(Math.max(1, bounds.height - TOOLBAR_HEIGHT) * scale);
-
-    const cropX = Math.min(Math.max(relX, 0), Math.max(maxW - 2, 0));
-    const cropY = Math.min(Math.max(relY, 0), Math.max(maxH - 2, 0));
-    const cropW = Math.min(w, maxW - cropX);
-    const cropH = Math.min(h, maxH - cropY);
+    const relX = Math.round((captureBounds.x - display.bounds.x) * scale);
+    const relY = Math.round((captureBounds.y - display.bounds.y) * scale);
+    const expectedW = Math.round(captureBounds.width * scale);
+    const expectedH = Math.round(captureBounds.height * scale);
+    const cropX = captureResult.isRegion
+      ? 0
+      : Math.min(Math.max(relX, 0), Math.max(maxW - 2, 0));
+    const cropY = captureResult.isRegion
+      ? 0
+      : Math.min(Math.max(relY, 0), Math.max(maxH - 2, 0));
+    const cropW = captureResult.isRegion ? maxW : Math.min(expectedW, maxW - cropX);
+    const cropH = captureResult.isRegion ? maxH : Math.min(expectedH, maxH - cropY);
 
     if (cropW <= 4 || cropH <= 4) {
       sendStatus('ok');
       return;
     }
 
-    image.crop({ x: cropX, y: cropY, w: cropW, h: cropH });
+    if (!captureResult.isRegion) image.crop({ x: cropX, y: cropY, w: cropW, h: cropH });
     // Retina screenshots thường có 2 physical pixels / CSS pixel. Tesseract
     // không cần toàn bộ mật độ đó; chuẩn hóa xuống 1.5x giúp giảm mạnh số pixel.
     // Vùng nhỏ non-Retina vẫn được upscale nhẹ để giữ độ chính xác chữ nhỏ.
@@ -484,8 +533,29 @@ async function captureAndOcr() {
     sendStatus('ok');
 
     if (!paragraphs.length) {
+      if (liveMode && captureResult.isOverlayExcluded) {
+        emptyLiveScans += 1;
+        if (emptyLiveScans >= LIVE_EMPTY_SCANS_TO_CLEAR) {
+          lastSourceSignature = '';
+          sendTranslation([]);
+        }
+        overlayLocked = false;
+      } else {
+        // Vùng chọn rỗng không cần OCR lặp vô hạn; kéo/resize hoặc refresh sẽ mở khóa.
+        overlayLocked = true;
+      }
       return;
     }
+
+    emptyLiveScans = 0;
+    const sourceSignature = paragraphs
+      .map((paragraph) => paragraph.translationInput)
+      .join('\u001e');
+    if (liveMode && captureResult.isOverlayExcluded && sourceSignature === lastSourceSignature) {
+      overlayLocked = false;
+      return;
+    }
+    lastSourceSignature = sourceSignature;
 
     // Dịch một số đoạn song song để giảm độ trễ mà không tạo quá nhiều request
     // cùng lúc tới endpoint Google miễn phí.
@@ -529,7 +599,7 @@ async function captureAndOcr() {
     if (generation !== scanGeneration) return;
 
     sendTranslation(lines);
-    overlayLocked = true;
+    overlayLocked = !(liveMode && captureResult.isOverlayExcluded);
     const finishedAt = Date.now();
     console.log(
       `[scan] capture=${capturedAt - scanStartedAt}ms ` +
@@ -540,6 +610,7 @@ async function captureAndOcr() {
   } catch (err) {
     console.error('OCR/translate error:', err);
     sendStatus('error');
+    if (!liveMode) overlayLocked = true;
   } finally {
     capturing = false;
   }
@@ -553,7 +624,7 @@ async function setOcrLanguage(lang) {
       await Promise.all(workers.map((worker) => worker.reinitialize(lang)));
     } else {
       await Promise.all(workers.map((worker) => worker.terminate()));
-      workers = await createOcrWorkers(lang);
+      workers = await createOcrWorkers(lang, 1);
     }
     ocrLang = lang;
     requestScan();
@@ -584,7 +655,27 @@ ipcMain.on('app:toggle-pause', () => {
 
 ipcMain.on('app:refresh', () => requestScan());
 
-ipcMain.handle('app:get-state', () => ({ ocrLang, targetLang, paused }));
+ipcMain.on('app:set-live-mode', (event, enabled) => {
+  liveMode = Boolean(enabled);
+  if (liveMode) {
+    if (!hasNativeOverlayCapture()) {
+      liveMode = false;
+      sendStatus('live-unavailable');
+      return;
+    }
+    requestScan({ clearOverlay: false });
+  } else {
+    requestScan();
+  }
+});
+
+ipcMain.handle('app:get-state', () => ({
+  ocrLang,
+  targetLang,
+  paused,
+  liveMode,
+  liveAvailable: hasNativeOverlayCapture(),
+}));
 
 ipcMain.on('app:quit', () => app.quit());
 
@@ -592,7 +683,7 @@ app.whenReady().then(async () => {
   overlayWin = createOverlayWindow();
 
   sendStatus('loading-lang');
-  workers = await createOcrWorkers(ocrLang);
+  workers = await createOcrWorkers(ocrLang, 1);
   sendStatus('ok');
 
   requestScan();

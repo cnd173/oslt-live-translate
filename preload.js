@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('overlay', {
   setTargetLang: (lang) => ipcRenderer.send('app:set-target-lang', lang),
   setOcrLang: (lang) => ipcRenderer.send('app:set-ocr-lang', lang),
   togglePause: () => ipcRenderer.send('app:toggle-pause'),
+  setLiveMode: (enabled) => ipcRenderer.send('app:set-live-mode', enabled),
   refresh: () => ipcRenderer.send('app:refresh'),
   quit: () => ipcRenderer.send('app:quit'),
   getState: () => ipcRenderer.invoke('app:get-state'),
