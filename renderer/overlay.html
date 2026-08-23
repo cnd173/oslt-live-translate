@@ -110,8 +110,8 @@
     line-height: 1.32;
     letter-spacing: 0.002em;
     font-kerning: normal;
-    white-space: normal;
-    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     text-align: left;
     border: 0;
     border-radius: 3px;
@@ -249,6 +249,7 @@
       div.style.top = top + 'px';
       div.style.width = Math.max(4, right - left) + 'px';
       div.style.height = Math.max(4, bottom - top) + 'px';
+      div.style.textAlign = line.textAlign || 'left';
       renderPatchContent(div, line);
       patches.appendChild(div);
       entries.push({

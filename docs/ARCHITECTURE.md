@@ -16,8 +16,10 @@ OSLT là một ứng dụng Electron một cửa sổ. Main process chịu trác
 - Khởi động một Tesseract worker để toolbar hiện nhanh; chỉ tạo worker thứ hai khi ảnh đủ cao để OCR song song có lợi.
 - Ảnh cao được chia thành hai tile có overlap và OCR song song.
 - Duyệt block → paragraph → line và loại dòng có confidence thấp.
+- Với live mode, tạo image signature 48×32 sau crop/downscale để bỏ qua OCR khi nguồn không đổi.
+- Tối đa tám dòng confidence thấp được crop và OCR lại bằng page segmentation single-line trước khi lọc.
 - Tách paragraph khi khoảng cách dọc giữa hai dòng vượt ngưỡng dựa trên chiều cao chữ trung vị.
-- Dịch paragraph với tối đa năm request đồng thời; cache LRU 256 mục lưu cả Promise đang chạy để tránh request trùng trong live loop.
+- Dịch paragraph với tối đa hai request đồng thời; có backoff dùng chung cho HTTP 429 và cache LRU 256 mục lưu cả Promise đang chạy để tránh request trùng trong live loop.
 - Gửi text, bbox và chiều cao font ước lượng sang renderer.
 
 ### `preload.js`
@@ -39,6 +41,7 @@ Expose API giới hạn qua `contextBridge`:
 - Dùng binary search để tìm cỡ chữ lớn nhất vừa patch.
 - Không cho auto-fit phóng chữ quá cỡ ước lượng của văn bản gốc.
 - Nhóm các patch có `fontHeight` gần nhau và dùng cỡ fit trung vị làm mục tiêu chung; patch dài bất thường vẫn được thu nhỏ riêng để không tràn.
+- Giữ line-break nguồn trong text paragraph và suy luận `text-align` từ độ ổn định của mép trái/phải các dòng.
 - Mở rộng vùng render quanh bbox OCR trước khi thêm padding; dùng nền kín, font weight thường và line-height thoáng để giảm nhiễu từ chữ gốc.
 - Render styled runs bằng DOM API và `textContent`; không đưa nội dung OCR/dịch vào `innerHTML`.
 
@@ -60,9 +63,11 @@ Các token đặc biệt được thay bằng placeholder `__OSLTn__` trước k
 7. Ở chế độ thường, `overlayLocked` được bật để ngăn OCR đọc lại chính bản dịch.
 8. Ở chế độ live, ScreenCaptureKit loại trừ overlay theo PID; nếu chữ ký nguồn không đổi thì bỏ qua dịch/render. Một lần OCR rỗng chưa xóa patch; chỉ xóa sau hai lần liên tiếp.
 
+Image signature chỉ là bộ lọc nhanh, không thay thế OCR: nếu ảnh thay đổi thì pipeline vẫn OCR đầy đủ. Refinement confidence chạy sau OCR chính, chỉ thay thế dòng khi kết quả single-line có confidence cao hơn.
+
 Kéo/resize được debounce 400ms trước khi yêu cầu quét mới. Nút refresh và thay đổi ngôn ngữ cũng tạo một generation mới, nhờ đó kết quả từ tác vụ cũ không thể ghi đè lên tác vụ mới.
 
-Với ảnh xử lý cao từ 900px, pipeline chia ngang thành hai tile có overlap 48–90px. Dòng trong overlap được phân cho tile theo tâm bbox để tránh trùng. Hai nhóm paragraph giáp ranh được nối lại khi khoảng cách dòng và căn trái cho thấy chúng thuộc cùng đoạn. Terminal in timing `capture`, `ocr`, `translate` và `total` sau mỗi scan.
+Với ảnh xử lý cao từ 900px, pipeline chia ngang thành hai tile có overlap 48–90px. Dòng trong overlap được phân cho tile theo tâm bbox để tránh trùng. Hai nhóm paragraph giáp ranh được nối lại khi khoảng cách dòng và căn trái cho thấy chúng thuộc cùng đoạn. Terminal in timing `capture`, `ocr`, `refine`, `translate` và `total` sau mỗi scan.
 
 ## Hệ tọa độ
 
@@ -84,14 +89,14 @@ Dịch từng dòng giúp map layout dễ hơn nhưng làm mất ngữ cảnh. O
 
 ### Endpoint không chính thức
 
-Prototype dùng `translate.googleapis.com/translate_a/single` để không yêu cầu API key. Một bản production nên trừu tượng hóa translator và hỗ trợ API chính thức như Google Cloud Translation hoặc DeepL.
+Prototype dùng endpoint Google Translate-compatible mặc định để không yêu cầu API key; `OSLT_TRANSLATE_ENDPOINT` cho phép OSS thay bằng proxy tương thích. Một bản production nên trừu tượng hóa translator và hỗ trợ API chính thức như Google Cloud Translation hoặc DeepL.
 
 ## Hướng phát triển
 
 - Adapter cho nhiều dịch vụ dịch.
 - Worker thread cho OCR.
-- Cache theo hash ảnh để bỏ qua OCR khi vùng nguồn không đổi (hiện đã có cache dịch theo paragraph).
+- Image hash để bỏ qua OCR khi vùng nguồn không đổi đã được dùng trong live mode; cache dịch vẫn hoạt động độc lập theo paragraph.
 - Hỗ trợ multi-monitor chính xác hơn.
 - Phát hiện font family, weight, màu và alignment.
 - Bộ cài ký số cho macOS, Windows và Linux.
-- Unit test cho paragraph splitting, coordinate conversion và state machine.
+- Unit test cho paragraph splitting, coordinate conversion, image signature, căn lề và state machine.

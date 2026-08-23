@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build:native": "node scripts/build-native-capture.js",
-    "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js && node --check lib/promise-cache.js && node --check lib/screen-capture.js && node --check scripts/build-native-capture.js",
+    "benchmark": "node scripts/benchmark.js",
+    "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js && node --check lib/promise-cache.js && node --check lib/image-signature.js && node --check lib/layout.js && node --check lib/screen-capture.js && node --check scripts/build-native-capture.js && node --check scripts/benchmark.js",
     "test": "npm run check && node --test"
   },
   "keywords": [

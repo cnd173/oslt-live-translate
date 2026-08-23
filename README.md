@@ -13,10 +13,13 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Kéo và thay đổi kích thước để chọn vùng cần dịch.
 - OCR giữ lại bounding box và cấu trúc đoạn văn.
 - Tách lại paragraph khi Tesseract nhập nhầm các đoạn cách xa nhau.
-- Dịch tối đa năm đoạn song song để giảm độ trễ.
+- Dịch tối đa hai đoạn song song và backoff khi endpoint trả 429 để tránh tự làm nghẽn dịch vụ miễn phí.
 - Chuẩn hóa mật độ ảnh OCR trên Retina để giảm số pixel xử lý mà vẫn giữ tọa độ layout.
 - Vùng ảnh cao được chia làm hai tile overlap và OCR song song bằng hai worker.
-- Vẽ bản dịch đúng vị trí, căn trái và tự thu nhỏ để vừa vùng chữ gốc.
+- Live bỏ qua OCR khi hash ảnh nguồn không đổi; chỉ chạy lại khi vùng chọn thực sự thay đổi.
+- Dòng có confidence thấp được OCR lại theo chế độ single-line, giới hạn số dòng để không làm chậm toàn bộ pipeline.
+- Giữ xuống dòng của paragraph và suy luận căn trái, căn giữa hoặc căn phải từ bbox nguồn.
+- Vẽ bản dịch đúng vị trí và tự thu nhỏ để vừa vùng chữ gốc.
 - Đồng bộ font-size giữa các patch có cỡ chữ nguồn tương đương; label nhỏ vẫn giữ nhóm riêng.
 - Mở rộng patch quanh bbox, dùng nền kín và typography nhẹ để tăng safe space, tương phản và khả năng đọc đoạn dài.
 - Nhận diện word-level cho code/URL, nền xám và chữ xanh; giữ nguyên token kỹ thuật qua placeholder khi dịch.
@@ -25,6 +28,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
 - Không cần API key cho cấu hình mặc định.
+- Có thể trỏ `OSLT_TRANSLATE_ENDPOINT` tới proxy tương thích Google Translate để OSS tự vận hành endpoint riêng.
 
 ## Ảnh hưởng của cơ chế khóa
 
@@ -106,8 +110,15 @@ Ngôn ngữ đích hiện có: Việt, Anh, Nhật, Trung giản thể, Hàn, Ph
 ```bash
 npm start       # chạy ứng dụng Electron
 npm run build:native # build helper ScreenCaptureKit trên macOS
+npm run benchmark -- path/to/image.png eng # benchmark OCR trên ảnh fixture của bạn
 npm run check   # kiểm tra cú pháp JavaScript
 npm test        # chạy kiểm tra hiện có
+```
+
+Endpoint dịch mặc định là unofficial Google Translate-compatible. Có thể đổi endpoint trước khi chạy:
+
+```bash
+OSLT_TRANSLATE_ENDPOINT=https://your-proxy.example/translate npm start
 ```
 
 ## Kiến trúc
@@ -140,6 +151,8 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Chưa có bộ cài ký số hoặc bản phát hành đóng gói.
 - Multi-monitor và Windows/Linux chưa được kiểm thử đầy đủ.
 - OCR song song dùng nhiều RAM hơn worker đơn; vùng thấp hơn 900px tự động quay về một worker.
+- Image hash và căn lề là heuristic; thay đổi rất nhỏ hoặc font đặc biệt có thể không được phát hiện chính xác.
+- OCR lại dòng confidence thấp làm một số scan đầu lâu hơn, nhưng chỉ áp dụng tối đa tám dòng yếu.
 - Live an toàn cần macOS 14 trở lên và binary `native/bin/oslt-region-capture`; nếu ScreenCaptureKit lỗi runtime, app tự tắt live để tránh đọc nhầm patch.
 - Chưa có nhà cung cấp dịch chính thức hoặc cấu hình API key.
 

@@ -8,6 +8,7 @@ Cảm ơn bạn muốn đóng góp cho OSLT.
 git clone https://github.com/cnd173/oslt-live-translate.git
 cd oslt-live-translate
 npm install
+npm run build:native # macOS, cần cho live mode
 npm test
 npm start
 ```
@@ -21,7 +22,18 @@ Trên macOS, cấp Screen Recording permission trước khi kiểm thử OCR.
 3. Giữ thay đổi tập trung, tránh refactor không liên quan.
 4. Chạy `npm test`.
 5. Kiểm thử thủ công với ít nhất một đoạn ngắn và một trang nhiều paragraph.
-6. Gửi pull request kèm ảnh trước/sau nếu thay đổi layout.
+6. Với thay đổi OCR/layout, kiểm tra cả live mode, ảnh Retina và ít nhất một trường hợp căn giữa/căn phải.
+7. Gửi pull request kèm ảnh trước/sau và timing `capture/ocr/refine/translate/total` nếu thay đổi hiệu năng.
+
+## Benchmark OCR
+
+Dùng ảnh fixture cục bộ để không đưa ảnh người dùng vào repository:
+
+```bash
+npm run benchmark -- /path/to/sample.png eng
+```
+
+Script in ra kích thước ảnh, số dòng, số ký tự và thời gian OCR. Không commit ảnh có dữ liệu riêng tư.
 
 ## Quy ước code
 
@@ -37,6 +49,7 @@ Trên macOS, cấp Screen Recording permission trước khi kiểm thử OCR.
 - [ ] `npm test` thành công.
 - [ ] Không commit `node_modules`, trained data hoặc file cục bộ.
 - [ ] README/docs được cập nhật nếu hành vi thay đổi.
+- [ ] Nếu thay đổi layout/OCR, fixture hoặc test tương ứng đã được thêm.
 - [ ] Không làm mất khả năng chụp screenshot có overlay.
 - [ ] Kết quả không tự OCR và nhảy sau khi đã khóa.
 

@@ -2,8 +2,10 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const os = require('os');
 const path = require('path');
 const { Jimp, intToRGBA } = require('jimp');
-const { createWorker } = require('tesseract.js');
+const { createWorker, PSM } = require('tesseract.js');
 const { createPromiseCache } = require('./lib/promise-cache');
+const { imageSignature } = require('./lib/image-signature');
+const { detectTextAlign, joinParagraphLines } = require('./lib/layout');
 const {
   captureScreenRegion,
   hasNativeOverlayCapture,
@@ -18,10 +20,15 @@ const MIN_CONFIDENCE = 35;
 const MAX_LINES = 60;
 const TOOLBAR_HEIGHT = 30;
 const OCR_TARGET_PIXEL_RATIO = 1.5;
-const TRANSLATE_CONCURRENCY = 5;
+const TRANSLATE_CONCURRENCY = 2;
+const TRANSLATION_RATE_LIMIT_COOLDOWN_MS = 30_000;
+const TRANSLATE_ENDPOINT = process.env.OSLT_TRANSLATE_ENDPOINT ||
+  'https://translate.googleapis.com/translate_a/single';
 const MAX_OCR_WORKERS = Math.min(2, Math.max(1, os.availableParallelism() - 1));
 const OCR_PARALLEL_MIN_HEIGHT = 900;
 const LIVE_EMPTY_SCANS_TO_CLEAR = 2;
+const MAX_LOW_CONFIDENCE_LINES = 8;
+const LOW_CONFIDENCE_THRESHOLD = 45;
 const TRANSLATION_CACHE_LIMIT = 256;
 
 let overlayWin = null;
@@ -37,9 +44,12 @@ let overlayLocked = false;
 let liveMode = false;
 let scanGeneration = 0;
 let refreshTimer = null;
+let lastImageSignature = '';
 let lastSourceSignature = '';
 let emptyLiveScans = 0;
+let lastLiveScanHadText = true;
 const translationCache = createPromiseCache(TRANSLATION_CACHE_LIMIT);
+let translationBackoffUntil = 0;
 
 function createOverlayWindow() {
   const win = new BrowserWindow({
@@ -85,8 +95,10 @@ function sendTranslation(lines) {
 function requestScan({ clearOverlay = true } = {}) {
   scanGeneration += 1;
   overlayLocked = false;
+  lastImageSignature = '';
   lastSourceSignature = '';
   emptyLiveScans = 0;
+  lastLiveScanHadText = true;
   if (clearOverlay) sendTranslation([]);
   setTimeout(captureAndOcr, 100);
 }
@@ -109,11 +121,17 @@ async function ensureOcrWorkerCount(count, lang = ocrLang) {
 }
 
 async function translateText(text, tl) {
-  const url =
-    'https://translate.googleapis.com/translate_a/single' +
-    `?client=gtx&sl=auto&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
+  const separator = TRANSLATE_ENDPOINT.includes('?') ? '&' : '?';
+  const url = TRANSLATE_ENDPOINT + separator +
+    `client=gtx&sl=auto&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Translate HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(`Translate HTTP ${res.status}`);
+    error.status = res.status;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    error.retryAfterMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 0;
+    throw error;
+  }
   const json = await res.json();
   return (json[0] || []).map((part) => part[0]).join('');
 }
@@ -124,14 +142,17 @@ function sleep(ms) {
 
 // Dịch 1 đoạn văn bản, có retry nhẹ nếu endpoint free của Google tạm thời lỗi/giới hạn tốc độ.
 async function translateWithRetry(text, tl, attempts = 3) {
-  const cacheKey = `${tl}\u0000${text}`;
+  const cacheText = text.replace(/[ \t]+/g, ' ').trim();
+  const cacheKey = `${tl}\u0000${cacheText}`;
   try {
     return await translationCache.getOrCreate(
       cacheKey,
       () => translateWithRetryUncached(text, tl, attempts)
     );
   } catch (error) {
-    console.error('Translate giving up, keep original text:', error);
+    if (error.code !== 'TRANSLATION_COOLDOWN' && error.status !== 429) {
+      console.warn(`Translation unavailable; keeping source text: ${error.message}`);
+    }
     return text;
   }
 }
@@ -139,12 +160,31 @@ async function translateWithRetry(text, tl, attempts = 3) {
 async function translateWithRetryUncached(text, tl, attempts = 3) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
+    if (translationBackoffUntil > Date.now()) {
+      const error = new Error('translation rate-limit cooldown');
+      error.code = 'TRANSLATION_COOLDOWN';
+      throw error;
+    }
     try {
       return await translateText(text, tl);
     } catch (err) {
       lastErr = err;
-      console.error(`Translate failed (attempt ${i + 1}/${attempts}):`, err);
-      await sleep(300 * (i + 1));
+      const isRateLimited = err.status === 429;
+      if (isRateLimited) {
+        const wasAlreadyLimited = translationBackoffUntil > Date.now();
+        const cooldown = Math.max(
+          TRANSLATION_RATE_LIMIT_COOLDOWN_MS,
+          err.retryAfterMs || 0
+        );
+        translationBackoffUntil = Math.max(translationBackoffUntil, Date.now() + cooldown);
+        if (!wasAlreadyLimited) {
+          console.warn(`Translate rate-limited; pausing requests for ${cooldown}ms`);
+        }
+        throw err;
+      } else {
+        console.warn(`Translate failed (attempt ${i + 1}/${attempts}): ${err.message}`);
+        await sleep(300 * (i + 1));
+      }
     }
   }
   throw lastErr;
@@ -177,27 +217,29 @@ function flattenParagraphs(page) {
   return paragraphs;
 }
 
-function offsetBbox(bbox, offsetY) {
+function offsetBbox(bbox, offsetY, offsetX = 0) {
   return {
-    x0: bbox.x0,
+    x0: bbox.x0 + offsetX,
     y0: bbox.y0 + offsetY,
-    x1: bbox.x1,
+    x1: bbox.x1 + offsetX,
     y1: bbox.y1 + offsetY,
   };
 }
 
-function offsetLine(line, offsetY) {
+function offsetLine(line, offsetY, offsetX = 0) {
   return {
     ...line,
-    bbox: offsetBbox(line.bbox, offsetY),
+    bbox: offsetBbox(line.bbox, offsetY, offsetX),
     baseline: line.baseline ? {
       ...line.baseline,
+      x0: Number.isFinite(line.baseline.x0) ? line.baseline.x0 + offsetX : line.baseline.x0,
       y0: line.baseline.y0 + offsetY,
+      x1: Number.isFinite(line.baseline.x1) ? line.baseline.x1 + offsetX : line.baseline.x1,
       y1: line.baseline.y1 + offsetY,
     } : line.baseline,
     words: (line.words || []).map((word) => ({
       ...word,
-      bbox: offsetBbox(word.bbox, offsetY),
+      bbox: offsetBbox(word.bbox, offsetY, offsetX),
     })),
   };
 }
@@ -273,6 +315,63 @@ async function recognizeParagraphGroups(image) {
     (line, offsetY) => (line.bbox.y0 + line.bbox.y1) / 2 + offsetY >= splitY
   );
   return mergeTileBoundary(topGroups, bottomGroups);
+}
+
+function flattenLines(groups) {
+  return groups.flatMap((group) => group);
+}
+
+function bestRecognizedLine(data) {
+  const lines = flattenParagraphs(data).flat();
+  return lines
+    .filter((line) => (line.text || '').trim())
+    .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
+}
+
+async function refineLowConfidenceLines(image, groups) {
+  const candidates = flattenLines(groups)
+    .filter((line) => {
+      const lineConfidence = Number(line.confidence);
+      return Number.isFinite(lineConfidence) && lineConfidence < LOW_CONFIDENCE_THRESHOLD;
+    })
+    .sort((a, b) => (a.confidence || 0) - (b.confidence || 0))
+    .slice(0, MAX_LOW_CONFIDENCE_LINES);
+
+  if (!candidates.length) return groups;
+
+  const refined = await mapWithConcurrency(candidates, 2, async (line) => {
+    const lineHeight = Math.max(8, line.bbox.y1 - line.bbox.y0);
+    const paddingX = Math.max(8, Math.round(lineHeight * 0.65));
+    const paddingY = Math.max(5, Math.round(lineHeight * 0.35));
+    const x = Math.max(0, Math.floor(line.bbox.x0 - paddingX));
+    const y = Math.max(0, Math.floor(line.bbox.y0 - paddingY));
+    const right = Math.min(image.bitmap.width, Math.ceil(line.bbox.x1 + paddingX));
+    const bottom = Math.min(image.bitmap.height, Math.ceil(line.bbox.y1 + paddingY));
+    const width = right - x;
+    const height = bottom - y;
+    if (width < 8 || height < 8) return null;
+
+    const crop = image.clone().crop({ x, y, w: width, h: height });
+    const buffer = await crop.getBuffer('image/png');
+    const result = await workers[0].recognize(
+      buffer,
+      { tessedit_pageseg_mode: PSM.SINGLE_LINE },
+      { blocks: true }
+    );
+    const best = bestRecognizedLine(result.data);
+    const originalConfidence = Number(line.confidence);
+    const refinedConfidence = Number(best && best.confidence);
+    if (!best || !best.text || !Number.isFinite(refinedConfidence) ||
+      refinedConfidence <= (Number.isFinite(originalConfidence) ? originalConfidence : 0)) {
+      return null;
+    }
+    return { original: line, refined: offsetLine(best, y, x) };
+  });
+
+  const refinedByLine = new Map(
+    refined.filter(Boolean).map(({ original, refined: line }) => [original, line])
+  );
+  return groups.map((group) => group.map((line) => refinedByLine.get(line) || line));
 }
 
 function median(values) {
@@ -487,8 +586,26 @@ async function captureAndOcr() {
     }
     if (Math.abs(processingScale - 1) >= 0.05) image.scale(processingScale);
 
-    const paragraphGroups = await recognizeParagraphGroups(image);
+    if (liveMode) {
+      const currentImageSignature = imageSignature(image);
+      if (currentImageSignature === lastImageSignature) {
+        if (!lastLiveScanHadText) {
+          emptyLiveScans += 1;
+          if (emptyLiveScans >= LIVE_EMPTY_SCANS_TO_CLEAR) {
+            lastSourceSignature = '';
+            sendTranslation([]);
+          }
+        }
+        overlayLocked = false;
+        return;
+      }
+      lastImageSignature = currentImageSignature;
+    }
+
+    const recognizedGroups = await recognizeParagraphGroups(image);
     const recognizedAt = Date.now();
+    const paragraphGroups = await refineLowConfidenceLines(image, recognizedGroups);
+    const refinedAt = Date.now();
 
     // Gộp các dòng cùng 1 đoạn (paragraph) thành 1 khối văn bản liền mạch để
     // dịch giữ đúng ngữ cảnh/liên kết câu, thay vì dịch rời từng dòng riêng lẻ.
@@ -513,7 +630,7 @@ async function captureAndOcr() {
       totalLinesUsed += filtered.length;
 
       const avgHeight = paragraphAvgHeight(filtered);
-      const text = filtered.map((l) => l.text).join(' ');
+      const text = joinParagraphLines(filtered);
       const styledWords = classifyWordStyles(image, filtered.flatMap((l) => l.words));
       const translationPlan = createTranslationPlan(text, styledWords);
       paragraphs.push({
@@ -527,12 +644,14 @@ async function captureAndOcr() {
           y1: Math.max(...filtered.map((l) => l.bbox.y1)),
         },
         uniformHeight: avgHeight || filtered[0].bbox.y1 - filtered[0].bbox.y0,
+        textAlign: detectTextAlign(filtered),
       });
     }
 
     sendStatus('ok');
 
     if (!paragraphs.length) {
+      lastLiveScanHadText = false;
       if (liveMode && captureResult.isOverlayExcluded) {
         emptyLiveScans += 1;
         if (emptyLiveScans >= LIVE_EMPTY_SCANS_TO_CLEAR) {
@@ -548,6 +667,7 @@ async function captureAndOcr() {
     }
 
     emptyLiveScans = 0;
+    lastLiveScanHadText = true;
     const sourceSignature = paragraphs
       .map((paragraph) => paragraph.translationInput)
       .join('\u001e');
@@ -593,6 +713,7 @@ async function captureAndOcr() {
         original: p.text,
         translated: translations[index].text,
         runs: translations[index].runs,
+        textAlign: p.textAlign,
       };
     });
 
@@ -604,7 +725,8 @@ async function captureAndOcr() {
     console.log(
       `[scan] capture=${capturedAt - scanStartedAt}ms ` +
       `ocr=${recognizedAt - capturedAt}ms ` +
-      `translate=${finishedAt - recognizedAt}ms total=${finishedAt - scanStartedAt}ms ` +
+      `refine=${refinedAt - recognizedAt}ms ` +
+      `translate=${finishedAt - refinedAt}ms total=${finishedAt - scanStartedAt}ms ` +
       `workers=${workers.length}`
     );
   } catch (err) {
