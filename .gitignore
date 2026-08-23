@@ -17,6 +17,9 @@ CLAUDE.md
 # Logs and local output
 *.log
 npm-debug.log*
+.env
+.env.*
+!.env.example
 dist/
 out/
 release/

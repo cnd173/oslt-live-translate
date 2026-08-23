@@ -28,7 +28,7 @@ OSLT is a lightweight Electron overlay that captures a selected screen region, r
 - Hỗ trợ chuyển nhanh giữa bản dịch và văn bản OCR bằng nút `Aa`.
 - Có thể chụp screenshot chứa cả overlay và bản dịch.
 - Không cần API key cho cấu hình mặc định.
-- Có thể trỏ `OSLT_TRANSLATE_ENDPOINT` tới proxy tương thích Google Translate để OSS tự vận hành endpoint riêng.
+- Có adapter dịch: Google-compatible mặc định, Google Cloud Translation và DeepL; provider được chọn bằng biến môi trường.
 
 ## Ảnh hưởng của cơ chế khóa
 
@@ -115,11 +115,32 @@ npm run check   # kiểm tra cú pháp JavaScript
 npm test        # chạy kiểm tra hiện có
 ```
 
-Endpoint dịch mặc định là unofficial Google Translate-compatible. Có thể đổi endpoint trước khi chạy:
+### Provider dịch
+
+Mặc định app dùng endpoint Google Translate-compatible không cần API key. Có thể trỏ endpoint này tới proxy riêng:
 
 ```bash
 OSLT_TRANSLATE_ENDPOINT=https://your-proxy.example/translate npm start
 ```
+
+Với môi trường dùng lâu dài, nên chọn API chính thức. Không commit các key này vào repository:
+
+Có thể sao chép [`.env.example`](.env.example) để làm danh sách cấu hình; OSLT đọc biến môi trường của tiến trình và không tự đọc/ghi file `.env`.
+
+```bash
+# Google Cloud Translation v2
+OSLT_TRANSLATOR=google-cloud \
+OSLT_GOOGLE_CLOUD_API_KEY=your-key \
+npm start
+
+# DeepL API (dùng api-free.deepl.com nếu tài khoản ở free endpoint)
+OSLT_TRANSLATOR=deepl \
+OSLT_DEEPL_API_KEY=your-key \
+OSLT_DEEPL_ENDPOINT=https://api-free.deepl.com/v2/translate \
+npm start
+```
+
+Các provider đều nhận paragraph hoàn chỉnh, nên vẫn giữ được ngữ cảnh tốt hơn dịch từng dòng. Khi endpoint trả `429`, app tạm dừng request trong thời gian backoff và giữ lại text nguồn thay vì làm overlay nhảy liên tục.
 
 ## Kiến trúc
 
@@ -131,8 +152,8 @@ Jimp crop / optional upscale
 Tesseract.js OCR + bounding boxes
     ↓
 Paragraph grouping and gap splitting
-    ↓ translation cache
-Google Translate-compatible endpoint
+    ↓ translation cache + selected translator adapter
+Google-compatible / Google Cloud / DeepL
     ↓
 IPC → positioned HTML translation patches
 ```
@@ -154,7 +175,7 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Image hash và căn lề là heuristic; thay đổi rất nhỏ hoặc font đặc biệt có thể không được phát hiện chính xác.
 - OCR lại dòng confidence thấp làm một số scan đầu lâu hơn, nhưng chỉ áp dụng tối đa tám dòng yếu.
 - Live an toàn cần macOS 14 trở lên và binary `native/bin/oslt-region-capture`; nếu ScreenCaptureKit lỗi runtime, app tự tắt live để tránh đọc nhầm patch.
-- Chưa có nhà cung cấp dịch chính thức hoặc cấu hình API key.
+- Provider mặc định là endpoint không chính thức; provider chính thức cần API key và có thể phát sinh chi phí theo chính sách dịch vụ.
 
 Xem cách xử lý lỗi thường gặp tại [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 

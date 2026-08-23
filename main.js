@@ -6,6 +6,7 @@ const { createWorker, PSM } = require('tesseract.js');
 const { createPromiseCache } = require('./lib/promise-cache');
 const { imageSignature } = require('./lib/image-signature');
 const { detectTextAlign, joinParagraphLines } = require('./lib/layout');
+const { createTranslator } = require('./lib/translator');
 const {
   captureScreenRegion,
   hasNativeOverlayCapture,
@@ -22,14 +23,14 @@ const TOOLBAR_HEIGHT = 30;
 const OCR_TARGET_PIXEL_RATIO = 1.5;
 const TRANSLATE_CONCURRENCY = 2;
 const TRANSLATION_RATE_LIMIT_COOLDOWN_MS = 30_000;
-const TRANSLATE_ENDPOINT = process.env.OSLT_TRANSLATE_ENDPOINT ||
-  'https://translate.googleapis.com/translate_a/single';
 const MAX_OCR_WORKERS = Math.min(2, Math.max(1, os.availableParallelism() - 1));
 const OCR_PARALLEL_MIN_HEIGHT = 900;
 const LIVE_EMPTY_SCANS_TO_CLEAR = 2;
 const MAX_LOW_CONFIDENCE_LINES = 8;
 const LOW_CONFIDENCE_THRESHOLD = 45;
 const TRANSLATION_CACHE_LIMIT = 256;
+
+const translator = createTranslator();
 
 let overlayWin = null;
 let workers = [];
@@ -120,22 +121,6 @@ async function ensureOcrWorkerCount(count, lang = ocrLang) {
   workers.push(...additional);
 }
 
-async function translateText(text, tl) {
-  const separator = TRANSLATE_ENDPOINT.includes('?') ? '&' : '?';
-  const url = TRANSLATE_ENDPOINT + separator +
-    `client=gtx&sl=auto&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const error = new Error(`Translate HTTP ${res.status}`);
-    error.status = res.status;
-    const retryAfter = Number(res.headers.get('retry-after'));
-    error.retryAfterMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 0;
-    throw error;
-  }
-  const json = await res.json();
-  return (json[0] || []).map((part) => part[0]).join('');
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -166,7 +151,7 @@ async function translateWithRetryUncached(text, tl, attempts = 3) {
       throw error;
     }
     try {
-      return await translateText(text, tl);
+      return await translator.translate(text, tl);
     } catch (err) {
       lastErr = err;
       const isRateLimited = err.status === 429;

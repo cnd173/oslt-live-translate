@@ -31,9 +31,18 @@ Trên macOS, chạy thêm `npm run build:native` để capture đúng vùng thay
 
 Nếu muốn theo dõi tự động, chạy `npm run build:native` rồi bật nút `◎`. Live chỉ cập nhật khi OCR thấy nội dung nguồn khác; cache dịch giúp đoạn cũ không tạo request mới.
 
-Nếu terminal báo `Translate rate-limited`, endpoint miễn phí đang giới hạn tốc độ. App tự backoff và thử lại; với OSS dùng lâu dài nên cấu hình adapter cho dịch vụ chính thức thay vì tăng concurrency.
+Nếu terminal báo `Translate rate-limited`, endpoint đang giới hạn tốc độ. App tự backoff và giữ text nguồn; với OSS dùng lâu dài nên chọn provider chính thức thay vì tăng concurrency.
 
 Nếu dùng proxy tương thích, đặt biến môi trường `OSLT_TRANSLATE_ENDPOINT` trước `npm start` và kiểm tra proxy trả JSON cùng cấu trúc `json[0][i][0]` như endpoint mặc định.
+
+Để dùng provider chính thức:
+
+```bash
+OSLT_TRANSLATOR=google-cloud OSLT_GOOGLE_CLOUD_API_KEY=your-key npm start
+OSLT_TRANSLATOR=deepl OSLT_DEEPL_API_KEY=your-key npm start
+```
+
+Google Cloud dùng endpoint v2 mặc định. DeepL dùng `https://api.deepl.com/v2/translate`; tài khoản free có thể đặt `OSLT_DEEPL_ENDPOINT=https://api-free.deepl.com/v2/translate`. Kiểm tra mã ngôn ngữ được provider đó hỗ trợ nếu bản dịch bị từ chối.
 
 ## Layout không khớp hoàn toàn
 

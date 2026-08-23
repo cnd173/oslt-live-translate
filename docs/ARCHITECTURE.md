@@ -19,7 +19,7 @@ OSLT là một ứng dụng Electron một cửa sổ. Main process chịu trác
 - Với live mode, tạo image signature 48×32 sau crop/downscale để bỏ qua OCR khi nguồn không đổi.
 - Tối đa tám dòng confidence thấp được crop và OCR lại bằng page segmentation single-line trước khi lọc.
 - Tách paragraph khi khoảng cách dọc giữa hai dòng vượt ngưỡng dựa trên chiều cao chữ trung vị.
-- Dịch paragraph với tối đa hai request đồng thời; có backoff dùng chung cho HTTP 429 và cache LRU 256 mục lưu cả Promise đang chạy để tránh request trùng trong live loop.
+- Dịch paragraph với tối đa hai request đồng thời; `lib/translator.js` chọn provider và chuẩn hóa response, còn `main.js` giữ backoff dùng chung cho HTTP 429 và cache LRU 256 mục lưu cả Promise đang chạy để tránh request trùng trong live loop.
 - Gửi text, bbox và chiều cao font ước lượng sang renderer.
 
 ### `preload.js`
@@ -58,7 +58,7 @@ Các token đặc biệt được thay bằng placeholder `__OSLTn__` trước k
 2. `captureAndOcr()` chụp đúng vùng cửa sổ, trừ toolbar.
 3. Tesseract trả text cùng layout.
 4. App tạo các paragraph logic và bbox bao quanh từng paragraph.
-5. Các paragraph được dịch với concurrency tối đa bằng 5.
+5. Các paragraph được dịch với concurrency tối đa bằng 2 qua translator adapter.
 6. Nếu generation chưa thay đổi, renderer nhận kết quả và vẽ patch.
 7. Ở chế độ thường, `overlayLocked` được bật để ngăn OCR đọc lại chính bản dịch.
 8. Ở chế độ live, ScreenCaptureKit loại trừ overlay theo PID; nếu chữ ký nguồn không đổi thì bỏ qua dịch/render. Một lần OCR rỗng chưa xóa patch; chỉ xóa sau hai lần liên tiếp.
@@ -87,13 +87,14 @@ Nếu overlay vẫn xuất hiện trong screenshot, OCR liên tục sẽ đọc 
 
 Dịch từng dòng giúp map layout dễ hơn nhưng làm mất ngữ cảnh. OSLT gộp các dòng cùng paragraph để dịch, sau đó dùng bbox bao toàn đoạn. Điều này giữ ngữ cảnh tốt hơn nhưng có thể để lại khoảng trống nếu bản dịch ngắn hơn đáng kể.
 
-### Endpoint không chính thức
+### Translator adapter
 
-Prototype dùng endpoint Google Translate-compatible mặc định để không yêu cầu API key; `OSLT_TRANSLATE_ENDPOINT` cho phép OSS thay bằng proxy tương thích. Một bản production nên trừu tượng hóa translator và hỗ trợ API chính thức như Google Cloud Translation hoặc DeepL.
+`lib/translator.js` tách giao thức dịch khỏi pipeline OCR/layout. Provider mặc định là Google-compatible để chạy thử không cần key; OSS có thể đổi sang Google Cloud Translation hoặc DeepL bằng `OSLT_TRANSLATOR` và biến môi trường tương ứng. Adapter chỉ nhận một paragraph và trả một chuỗi, nên cache, retry, placeholder style và layout không phụ thuộc nhà cung cấp.
+
+Adapter không tự gửi telemetry và không ghi API key ra log. API chính thức nên được ưu tiên cho triển khai lâu dài vì endpoint mặc định không có SLA và có thể bị giới hạn tốc độ.
 
 ## Hướng phát triển
 
-- Adapter cho nhiều dịch vụ dịch.
 - Worker thread cho OCR.
 - Image hash để bỏ qua OCR khi vùng nguồn không đổi đã được dùng trong live mode; cache dịch vẫn hoạt động độc lập theo paragraph.
 - Hỗ trợ multi-monitor chính xác hơn.
