@@ -332,7 +332,10 @@ async function refineLowConfidenceLines(image, groups) {
   const candidates = flattenLines(groups)
     .filter((line) => {
       const lineConfidence = Number(line.confidence);
-      return Number.isFinite(lineConfidence) && lineConfidence < LOW_CONFIDENCE_THRESHOLD;
+      const lineWidth = line.bbox.x1 - line.bbox.x0;
+      const lineHeight = line.bbox.y1 - line.bbox.y0;
+      return Number.isFinite(lineConfidence) && lineConfidence < LOW_CONFIDENCE_THRESHOLD &&
+        lineWidth >= 20 && lineHeight >= 8;
     })
     .sort((a, b) => (a.confidence || 0) - (b.confidence || 0))
     .slice(0, MAX_LOW_CONFIDENCE_LINES);
