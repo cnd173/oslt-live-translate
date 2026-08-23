@@ -29,10 +29,17 @@ jobs:
       - name: Verify source
         run: npm test
 
-      - name: Build native capture helper
-        run: npm run build:native
+      - name: Build DMG
+        run: npm run package:mac
 
-      - name: Build and publish DMG
-        run: npm run package:mac:publish
+      - name: Create GitHub Release and upload artifacts
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          release/OSLT-*.dmg
+          release/OSLT-*.dmg.blockmap
+          --repo cnd173/oslt-live-translate
+          --verify-tag
+          --generate-notes
+          --title "OSLT ${GITHUB_REF_NAME}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

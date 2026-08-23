@@ -7,7 +7,6 @@
     "start": "electron .",
     "build:native": "node scripts/build-native-capture.js",
     "package:mac": "npm run build:native && electron-builder --mac dmg --publish never",
-    "package:mac:publish": "npm run build:native && electron-builder --mac dmg --publish always",
     "benchmark": "node scripts/benchmark.js",
     "check": "node --check main.js && node --check preload.js && node --check lib/style-preserver.js && node --check lib/promise-cache.js && node --check lib/image-signature.js && node --check lib/layout.js && node --check lib/translator.js && node --check lib/screen-capture.js && node --check scripts/build-native-capture.js && node --check scripts/benchmark.js",
     "test": "npm run check && node --test"

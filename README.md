@@ -165,7 +165,7 @@ Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Trên máy Mac, chạy `npm run package:mac` để build helper ScreenCaptureKit và tạo DMG trong thư mục `release/`. Bản build mặc định là unsigned; người dùng cần cấp quyền Screen Recording cho OSLT sau khi cài.
 
-Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.1`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ chạy test, build native helper và upload DMG vào GitHub Release bằng `GITHUB_TOKEN`. Ký code/notarization chưa bật; muốn bật cần cấu hình certificate secrets riêng cho repository.
+Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.1`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ chạy test, build native helper và upload DMG tuần tự vào GitHub Release bằng `GITHUB_TOKEN`. Ký code/notarization chưa bật; muốn bật cần cấu hình certificate secrets riêng cho repository.
 
 ## Giới hạn đã biết
 
