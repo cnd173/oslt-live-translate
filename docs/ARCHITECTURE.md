@@ -37,6 +37,7 @@ Expose API giới hạn qua `contextBridge`:
 ### `renderer/overlay.html`
 
 - Vẽ toolbar trong vùng cao 30px.
+- Chạy với Electron context isolation, Node integration tắt, sandbox bật và CSP chỉ cho phép tài nguyên nội bộ.
 - Vẽ mỗi paragraph dưới dạng patch tuyệt đối theo bbox OCR.
 - Dùng binary search để tìm cỡ chữ lớn nhất vừa patch.
 - Không cho auto-fit phóng chữ quá cỡ ước lượng của văn bản gốc.

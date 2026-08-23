@@ -29,7 +29,8 @@ test('calls Google Cloud Translation with a plain-text POST', async () => {
   });
 
   assert.equal(await translator.translate('Hello', 'vi'), 'Xin chào');
-  assert.match(request.url, /key=test-key/);
+  assert.doesNotMatch(request.url, /key=test-key/);
+  assert.equal(request.options.headers['x-goog-api-key'], 'test-key');
   assert.equal(request.options.method, 'POST');
   assert.deepEqual(JSON.parse(request.options.body), {
     q: ['Hello'],
@@ -67,4 +68,32 @@ test('rejects an unsupported provider and malformed responses', () => {
   );
   assert.throws(() => parseGoogleCloudResponse({}), /Invalid Google Cloud/);
   assert.throws(() => parseDeepLResponse({}), /Invalid DeepL/);
+});
+
+test('rejects non-HTTPS remote translator endpoints', async () => {
+  const translator = createTranslator({
+    provider: 'google-compatible',
+    compatibleEndpoint: 'http://translation.example.test/translate',
+    fetchImpl: async () => ({ ok: true, json: async () => [[['ok']]] }),
+  });
+
+  await assert.rejects(
+    translator.translate('Hello', 'vi'),
+    /must use HTTPS/
+  );
+});
+
+test('allows an HTTP localhost translator proxy for development', async () => {
+  let requestedUrl;
+  const translator = createTranslator({
+    provider: 'google-compatible',
+    compatibleEndpoint: 'http://localhost:8787/translate',
+    fetchImpl: async (url) => {
+      requestedUrl = url;
+      return { ok: true, json: async () => [[['Xin chào']]] };
+    },
+  });
+
+  assert.equal(await translator.translate('Hello', 'vi'), 'Xin chào');
+  assert.match(requestedUrl, /^http:\/\/localhost:8787\/translate/);
 });

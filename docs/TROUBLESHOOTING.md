@@ -35,6 +35,8 @@ Nếu terminal báo `Translate rate-limited`, endpoint đang giới hạn tốc 
 
 Nếu dùng proxy tương thích, đặt biến môi trường `OSLT_TRANSLATE_ENDPOINT` trước `npm start` và kiểm tra proxy trả JSON cùng cấu trúc `json[0][i][0]` như endpoint mặc định.
 
+Proxy từ xa phải dùng `https://`. HTTP chỉ được chấp nhận cho proxy chạy trên `localhost`, `127.0.0.1` hoặc `::1`.
+
 Để dùng provider chính thức:
 
 ```bash

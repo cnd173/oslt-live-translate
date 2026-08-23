@@ -143,6 +143,8 @@ npm start
 
 Các provider đều nhận paragraph hoàn chỉnh, nên vẫn giữ được ngữ cảnh tốt hơn dịch từng dòng. Khi endpoint trả `429`, app tạm dừng request trong thời gian backoff và giữ lại text nguồn thay vì làm overlay nhảy liên tục.
 
+Endpoint tùy chỉnh phải dùng HTTPS; chỉ `localhost`, `127.0.0.1` hoặc `::1` được phép dùng HTTP cho proxy phát triển. Google Cloud API key được gửi qua header thay vì query string.
+
 ## Kiến trúc
 
 ```text
