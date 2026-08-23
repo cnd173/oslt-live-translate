@@ -68,6 +68,10 @@ Nhấn `Aa` để kiểm tra text OCR. Nếu OCR đã sai, hãy chọn đúng ng
 
 Phiên bản hiện tại không bật Electron content protection, vì vậy screenshot hệ thống phải chứa overlay. Hãy chắc chắn đang chạy code mới nhất và không còn một instance cũ. Thoát tất cả instance rồi chạy lại `npm start`.
 
+## DMG không bật được live mode
+
+Bộ cài DMG đặt native helper bên ngoài `app.asar` tại `Resources/native/bin`. Nếu nút `◎` bị vô hiệu hóa, hãy cấp quyền Screen Recording cho OSLT trong System Settings rồi mở lại app. Khi build thủ công, dùng `npm run package:mac` để build helper trước khi tạo DMG.
+
 ## CPU cao
 
 Native live capture không dùng content protection, nên không làm mất overlay khỏi screenshot hệ thống. Nếu live bị tắt sau khi chạy, helper ScreenCaptureKit đã lỗi hoặc quyền Screen Recording bị thu hồi; app tự tắt live để tránh kết quả sai.

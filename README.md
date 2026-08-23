@@ -110,6 +110,7 @@ Ngôn ngữ đích hiện có: Việt, Anh, Nhật, Trung giản thể, Hàn, Ph
 ```bash
 npm start       # chạy ứng dụng Electron
 npm run build:native # build helper ScreenCaptureKit trên macOS
+npm run package:mac # tạo bộ cài DMG unsigned trên macOS
 npm run benchmark -- path/to/image.png eng # benchmark OCR trên ảnh fixture của bạn
 npm run check   # kiểm tra cú pháp JavaScript
 npm test        # chạy kiểm tra hiện có
@@ -159,6 +160,12 @@ IPC → positioned HTML translation patches
 ```
 
 Xem chi tiết tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Phát hành macOS
+
+Trên máy Mac, chạy `npm run package:mac` để build helper ScreenCaptureKit và tạo DMG trong thư mục `release/`. Bản build mặc định là unsigned; người dùng cần cấp quyền Screen Recording cho OSLT sau khi cài.
+
+Maintainer có thể tạo release tự động bằng cách push tag dạng `v1.0.1`. Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ chạy test, build native helper và upload DMG vào GitHub Release bằng `GITHUB_TOKEN`. Ký code/notarization chưa bật; muốn bật cần cấu hình certificate secrets riêng cho repository.
 
 ## Giới hạn đã biết
 
